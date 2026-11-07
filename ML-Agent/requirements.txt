@@ -1,0 +1,11 @@
+# Tested on Python 3.13 / Windows 11.
+# For CUDA, install the matching PyTorch wheel for your driver first:
+# https://pytorch.org/get-started/locally/
+numpy==2.2.2
+pandas==3.1.1
+scikit-learn==1.6.1
+scipy==1.15.1
+matplotlib==3.10.1
+joblib==1.4.2
+networkx==3.4.2
+torch>=2.2

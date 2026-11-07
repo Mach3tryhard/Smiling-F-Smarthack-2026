@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evplacement"
+version = "3.0.0"
+description = "Synthetic graph-city benchmark and agent for EV charging placement"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "scikit-learn>=1.5",
+    "scipy>=1.11",
+    "matplotlib>=3.8",
+    "joblib>=1.3",
+    "networkx>=3.0",
+    "torch>=2.2",
+]
+
+[project.scripts]
+evplacement = "evplacement.synthetic.cli:main"
+evcharge-synthetic = "evplacement.synthetic.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

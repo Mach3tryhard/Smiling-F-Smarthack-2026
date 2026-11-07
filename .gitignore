@@ -1,1 +1,9 @@
-.venv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# pyrosm out-of-core scratch directories and caches (regenerated, multi-GB)
+ML-Agent/.tmp/
+ML-Agent/pyrosm/
+ML-Agent/pyrosm_ooc_*/
