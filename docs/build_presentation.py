@@ -1,7 +1,7 @@
-"""Build the 5-minute PPC EV Siting Lab presentation.
+"""Build the concise 5-minute PPC EV Siting Lab presentation.
 
-The deck is deliberately narrative: one idea per slide, few keywords, and
-speaker notes that explain the project without requiring ML background.
+Eight slides: problem, Huff simulator, MLP models, greedy selection, results,
+product, and limits. No appendix, no narrative filler.
 
 Run with the bundled Python:
     python docs/build_presentation.py
@@ -41,7 +41,7 @@ M = 0.72
 
 
 def add_text(slide, x, y, w, h, text, *, size=18, color=NAVY, bold=False,
-             align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP, spacing=1.05):
+             align=PP_ALIGN.LEFT, anchor=MSO_ANCHOR.TOP, spacing=1.08):
     box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
     tf = box.text_frame
     tf.clear()
@@ -84,23 +84,19 @@ def add_rect(slide, x, y, w, h, fill, line=None, radius=False, line_width=1.2):
     return shape
 
 
-def add_top(slide, number, label, title, *, title_size=32, title_width=11.8):
-    add_text(slide, M, 0.36, 0.55, 0.3, f"{number:02d}", size=10, color=ORANGE, bold=True)
-    add_text(slide, M + 0.48, 0.36, 6.0, 0.3, label.upper(), size=9.5, color=MUTED, bold=True)
-    add_text(slide, M, 0.78, title_width, 1.35, title, size=title_size, color=NAVY, bold=True, spacing=0.98)
+def add_top(slide, number, label, title, *, size=31, width=12.0):
+    add_text(slide, M, 0.35, 0.5, 0.28, f"{number:02d}", size=9.5, color=ORANGE, bold=True)
+    add_text(slide, M + 0.45, 0.35, 7.2, 0.28, label.upper(), size=9, color=MUTED, bold=True)
+    add_text(slide, M, 0.76, width, 1.2, title, size=size, color=NAVY, bold=True, spacing=0.98)
 
 
 def add_footer(slide, number):
-    add_rect(slide, M, 7.05, SW - 2 * M, 0.01, LINE)
-    add_text(slide, M, 7.15, 8.8, 0.2,
+    add_rect(slide, M, 7.04, SW - 2 * M, 0.01, LINE)
+    add_text(slide, M, 7.14, 9.0, 0.2,
              "PPC EV Siting Lab  ·  24h to Power PPC  ·  Smarthack XI 2026",
-             size=8.5, color=MUTED)
-    add_text(slide, SW - 1.1, 7.15, 0.4, 0.2, f"{number:02d}", size=8.5, color=MUTED,
+             size=8.2, color=MUTED)
+    add_text(slide, SW - 1.0, 7.14, 0.3, 0.2, f"{number:02d}", size=8.2, color=MUTED,
              bold=True, align=PP_ALIGN.RIGHT)
-
-
-def add_body(slide, x, y, w, h, text, *, size=17, color=NAVY, bold=False, spacing=1.18):
-    add_text(slide, x, y, w, h, text, size=size, color=color, bold=bold, spacing=spacing)
 
 
 def add_image(slide, path, x, y, w, h, border=True):
@@ -112,339 +108,299 @@ def add_image(slide, path, x, y, w, h, border=True):
     if border:
         add_rect(slide, dx - 0.04, dy - 0.04, dw + 0.08, dh + 0.08, WHITE, LINE, radius=True)
     slide.shapes.add_picture(str(path), Inches(dx), Inches(dy), Inches(dw), Inches(dh))
-    return dx, dy, dw, dh
 
 
 def add_notes(slide, text):
     slide.notes_slide.notes_text_frame.text = text
 
 
+def box_text(slide, x, y, w, h, text, *, fill=WHITE, line=LINE, size=11, color=NAVY,
+             bold=False, radius=True):
+    add_rect(slide, x, y, w, h, fill, line, radius=radius)
+    add_text(slide, x + 0.18, y + 0.14, w - 0.36, h - 0.24, text, size=size, color=color,
+             bold=bold, spacing=1.15)
+
+
 def slide_title(prs, blank):
     s = prs.slides.add_slide(blank)
     add_rect(s, 0, 0, SW, SH, WHITE)
-    add_rect(s, M, 0.55, 0.09, 0.32, ORANGE)
-    add_text(s, M + 0.18, 0.51, 6.6, 0.3,
+    add_rect(s, M, 0.55, 0.09, 0.31, ORANGE)
+    add_text(s, M + 0.18, 0.51, 7.0, 0.3,
              "24H TO POWER PPC  ·  SMARTHACK XI 2026",
-             size=10.5, color=BLUE, bold=True)
-    add_text(s, M, 1.12, 6.4, 2.15,
-             "Unde punem\n8 stații de\nîncărcare?",
-             size=38, color=NAVY, bold=True, spacing=0.92)
-    add_text(s, M, 3.48, 5.85, 0.8,
-             "Un agent care alege pentru întreaga rețea,\nnu pentru o singură stație.",
-             size=18, color=BLUE, bold=True, spacing=1.15)
-    add_text(s, M, 4.42, 5.4, 0.6,
-             "O poveste despre date, decizie și explicație.",
-             size=13, color=MUTED)
-    add_text(s, M, 6.55, 6.0, 0.3,
-             "Prezentare de 5 minute  ·  demo live în română",
-             size=9.5, color=MUTED)
-    add_image(s, ASSETS / "map-canvas.png", 7.0, 0.58, 5.7, 5.65)
-    add_rect(s, 7.35, 6.35, 2.45, 0.42, NAVY, NAVY, radius=True)
-    add_text(s, 7.45, 6.37, 2.25, 0.36,
-             "85,5% la K=8", size=11, color=WHITE, bold=True,
+             size=10, color=BLUE, bold=True)
+    add_text(s, M, 1.13, 6.2, 1.0, "PPC EV Siting Lab", size=34, color=NAVY, bold=True)
+    add_text(s, M, 2.05, 6.1, 0.95,
+             "Amplasarea stațiilor EV\nsub un buget K",
+             size=27, color=NAVY, bold=True, spacing=1.05)
+    add_text(s, M, 3.35, 6.0, 0.6,
+             "Simulator Huff  ·  două MLP-uri  ·  optimizator greedy",
+             size=15, color=BLUE, bold=True)
+    add_text(s, M, 4.15, 5.8, 1.1,
+             "Recomandări cu rang, încredere și explicație,\nverificabile până la rândul CSV.",
+             size=13, color=MUTED, spacing=1.2)
+    add_image(s, ASSETS / "map-canvas.png", 7.0, 0.62, 5.7, 5.7)
+    add_rect(s, 7.4, 6.45, 2.35, 0.38, NAVY, NAVY, radius=True)
+    add_text(s, 7.5, 6.47, 2.15, 0.34, "85,5% la K=8", size=10.5, color=WHITE, bold=True,
              align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
-    add_text(s, 9.95, 6.42, 2.7, 0.3, "40 de orașe de test", size=9, color=MUTED)
-    add_notes(s, "[0:00–0:20] Întrebarea este simplă: ai buget pentru opt stații într-un oraș. Unde le pui? În următoarele cinci minute arătăm de ce răspunsul evident nu este suficient și cum am construit un agent care alege pentru întreaga rețea. Interfața este în română și o folosim ca demo.")
+    add_text(s, 9.95, 6.5, 2.6, 0.28, "40 de orașe de test", size=8.5, color=MUTED)
+    add_notes(s, "[0:00–0:20] Proiectul rezolvă o problemă de amplasare: K stații de încărcare într-un oraș. Decizia este susținută de un simulator Huff, două MLP-uri antrenate local și un optimizator greedy. Prezentarea explică alegerile și rezultatele; demo-ul arată explicația pentru fiecare sit.")
     return s
 
 
-def slide_naive(prs, blank):
+def slide_problem(prs, blank):
     s = prs.slides.add_slide(blank)
-    add_top(s, 2, "Răspunsul evident", "Unde e multă lume.", title_size=36, title_width=9.5)
-    add_body(s, M, 2.35, 6.3, 0.8,
-             "Punem stațiile în zonele aglomerate.\nPare cea mai simplă alegere.",
-             size=18, spacing=1.2)
-    add_text(s, M, 4.25, 6.7, 0.7, "Dar o stație nu funcționează singură.", size=22,
-             color=ORANGE, bold=True)
-    # population dots
-    for i, (x, y) in enumerate([
-        (8.3, 2.35), (8.9, 2.15), (9.5, 2.55), (10.1, 2.3), (10.7, 2.6),
-        (8.7, 3.0), (9.3, 3.25), (10.0, 3.05), (10.6, 3.35), (11.1, 3.0),
-        (9.0, 3.8), (9.7, 3.65), (10.3, 3.9), (11.0, 3.75),
-    ]):
-        c = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(x), Inches(y), Inches(0.17), Inches(0.17))
-        c.fill.solid(); c.fill.fore_color.rgb = RGBColor(0x9D, 0xB8, 0xD6); c.line.fill.background()
-    add_text(s, 8.35, 4.35, 4.0, 0.3, "multe puncte = multă cerere", size=9.5, color=MUTED,
-             align=PP_ALIGN.CENTER)
-    add_text(s, 9.55, 4.95, 1.8, 1.1, "?", size=68, color=ORANGE, bold=True,
-             align=PP_ALIGN.CENTER)
-    add_text(s, 8.3, 5.95, 4.1, 0.5, "Dar unde anume?", size=15, color=NAVY, bold=True,
-             align=PP_ALIGN.CENTER)
-    add_footer(s, 2)
-    add_notes(s, "[0:20–0:40] Răspunsul naiv este «unde e multă lume». Este o intuiție bună, dar incompletă. O stație nu există izolat: ea concurează cu stațiile din jur. De aici începe problema noastră.")
-    return s
-
-
-def slide_cannibalization(prs, blank):
-    s = prs.slides.add_slide(blank)
-    add_top(s, 3, "Ce se întâmplă de fapt", "A doua stație nu adaugă toată cererea.")
-    add_body(s, M, 2.15, 11.4, 0.65,
-             "O parte din clienții noii stații ar fi mers oricum la stația vecină.",
-             size=18)
-    # cards
-    add_rect(s, 1.05, 3.05, 3.0, 1.55, SOFT_BLUE, LINE, radius=True)
-    add_text(s, 1.25, 3.28, 2.6, 0.3, "STAȚIE EXISTENTĂ", size=9, color=BLUE, bold=True)
-    add_text(s, 1.25, 3.65, 2.6, 0.55, "clienți", size=26, color=NAVY, bold=True)
-    add_rect(s, 8.55, 3.05, 3.0, 1.55, SOFT_ORANGE, ORANGE, radius=True)
-    add_text(s, 8.75, 3.28, 2.6, 0.3, "STAȚIE NOUĂ", size=9, color=RGBColor(0x93, 0x44, 0x00), bold=True)
-    add_text(s, 8.75, 3.65, 2.6, 0.55, "aceiași clienți?", size=20, color=RGBColor(0x7A, 0x3D, 0x00), bold=True)
-    # arrow
-    arrow = s.shapes.add_shape(MSO_SHAPE.LEFT_RIGHT_ARROW, Inches(5.25), Inches(3.5), Inches(2.1), Inches(0.5))
+    add_top(s, 2, "Problema", "Obiectivul este utilizarea totală a rețelei.", size=31)
+    add_text(s, M, 1.95, 5.9, 0.7,
+             "Buget K stații. Se maximizează diferența dintre rețeaua cu și fără ele.",
+             size=15, color=MUTED, spacing=1.2)
+    add_rect(s, M, 2.95, 5.95, 1.3, NAVY, NAVY, radius=True)
+    add_text(s, M + 0.25, 3.05, 5.45, 0.3, "FUNCȚIA DE DECIZIE", size=8.5, color=RGBColor(0x9F, 0xC5, 0xE8), bold=True)
+    add_text(s, M + 0.25, 3.35, 5.45, 0.6,
+             "max  U(S ∪ A) − U(S),   |A| = K",
+             size=20, color=WHITE, bold=True)
+    add_text(s, M, 4.55, 5.9, 0.45,
+             "U = suma utilizării estimate a tuturor stațiilor.",
+             size=12, color=MUTED)
+    add_text(s, M, 5.35, 5.9, 0.45,
+             "Top-K după cerere grupează stațiile în aceleași zone.",
+             size=13, color=ORANGE, bold=True)
+    # diagram
+    box_text(s, 7.1, 2.1, 2.5, 1.35, "Stație\nexistentă", fill=SOFT_BLUE, line=BLUE, size=16, bold=True)
+    box_text(s, 10.2, 2.1, 2.5, 1.35, "Stație\nnouă", fill=SOFT_ORANGE, line=ORANGE, size=16, bold=True)
+    arrow = s.shapes.add_shape(MSO_SHAPE.LEFT_RIGHT_ARROW, Inches(9.05), Inches(2.62), Inches(0.8), Inches(0.32))
     arrow.fill.solid(); arrow.fill.fore_color.rgb = ORANGE; arrow.line.fill.background()
-    add_text(s, 5.15, 4.12, 2.35, 0.3, "o parte se mută", size=10, color=ORANGE, bold=True,
+    add_text(s, 8.65, 3.65, 3.6, 0.35, "o parte din cerere se mută", size=10, color=ORANGE, bold=True,
              align=PP_ALIGN.CENTER)
-    add_rect(s, M, 5.45, SW - 2 * M, 0.92, NAVY, radius=True)
-    add_text(s, M + 0.35, 5.58, SW - 2 * M - 0.7, 0.62,
-             "Beneficiul real = rețeaua după  −  rețeaua înainte",
-             size=20, color=WHITE, bold=True, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, 7.1, 4.35, 5.6, 0.5,
+             "Canibalizarea intră în beneficiul total.",
+             size=12, color=NAVY, bold=True)
+    # output chips
+    for i, (label, fill, line) in enumerate([
+        ("ranking", MIST, LINE),
+        ("CSV K=8", MIST, LINE),
+        ("review uman", MIST, LINE),
+    ]):
+        add_rect(s, 7.1 + i * 1.85, 5.45, 1.68, 0.36, fill, line, radius=True)
+        add_text(s, 7.1 + i * 1.85, 5.47, 1.68, 0.32, label, size=8.5, color=NAVY, bold=True,
+                 align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+    add_footer(s, 2)
+    add_notes(s, "[0:20–0:55] Obiectivul este utilizarea totală a rețelei, nu utilizarea izolată a fiecărei stații. Formula scade utilizarea de bază din utilizarea după adăugarea celor K stații. O selecție top-K după cerere tinde să grupeze stațiile, iar o parte din cererea lor se mută între ele. De aceea avem nevoie de un model pentru creșterea incrementală și de un optimizator care penalizează vecinătatea.")
+    return s
+
+
+def slide_huff(prs, blank):
+    s = prs.slides.add_slide(blank)
+    add_top(s, 3, "Date și simulator", "Datele de referință: cerere latentă și competiție Huff.", size=28)
+    add_rect(s, M, 1.9, 6.2, 2.45, NAVY, NAVY, radius=True)
+    add_text(s, M + 0.22, 2.03, 5.8, 0.25, "MODELUL DE UTILIZARE", size=8.5, color=RGBColor(0x9F, 0xC5, 0xE8), bold=True)
+    add_text(s, M + 0.22, 2.35, 5.75, 1.75,
+             "competition_i = Σ_{j≠i} cap_j · exp(−d_ij / λ)\n"
+             "share_i = cap_i / (cap_i + competition_i)\n"
+             "usage_i = demand_i · share_i",
+             size=12.5, color=WHITE, spacing=1.45)
+    add_text(s, 7.0, 1.95, 5.5, 0.4, "400 de orașe sintetice", size=22, color=NAVY, bold=True)
+    add_text(s, 7.0, 2.45, 5.5, 0.4, "501.812 noduri · 36.809 stații existente", size=12, color=BLUE, bold=True)
+    add_text(s, 7.0, 3.15, 5.6, 1.4,
+             "Huff distribuie cererea între stații după capacitate și distanță. Simulatorul poate calcula astfel U(S ∪ {i}) − U(S) pentru orice candidat.",
+             size=11.5, color=NAVY, spacing=1.25)
+    add_text(s, 7.0, 4.85, 5.6, 0.7,
+             "Datele reale nu conțin acest contrafactual și sunt afectate de selecția operatorilor.",
+             size=10.5, color=ORANGE, bold=True)
+    add_text(s, M, 5.0, 6.0, 1.2,
+             "Separare strictă:\nmodelul nu vede cererea latentă, utilizarea observată sau flagul de stație.",
+             size=11, color=MUTED, spacing=1.2)
+    add_text(s, M, 6.3, 6.0, 0.3, "24 de features observabile per nod", size=9, color=NAVY, bold=True)
     add_footer(s, 3)
-    add_notes(s, "[0:40–1:05] Dacă punem o stație lângă alta, a doua nu creează toată cererea de la zero. O parte din clienți se mută de la prima. De aceea nu întrebăm cât de folosită este stația în sine, ci câtă cerere nouă aduce pentru întreaga rețea.")
+    add_notes(s, "[0:55–1:35] Utilizarea este generată cu un model Huff: fiecare stație are o capacitate, iar competiția scade exponențial cu distanța. Împărțim cererea latentă între stații proporțional cu capacitatea și competiția. Astfel putem calcula exact ce se întâmplă dacă adăugăm o stație oriunde. Datele reale nu au acest contrafactual, iar stațiile existente sunt deja alese de operatori. Modelul vede doar 24 de features observabile; cererea latentă și utilizarea observată rămân în simulator.")
     return s
 
 
-def slide_question(prs, blank):
+def slide_mlp(prs, blank):
     s = prs.slides.add_slide(blank)
-    add_top(s, 4, "Întrebarea corectă", "Așa că întrebarea se schimbă.", title_size=34)
-    add_rect(s, M, 2.2, 11.9, 2.0, MIST, LINE, radius=True)
-    add_text(s, M + 0.45, 2.45, 11.0, 0.85,
-             "Câtă cerere nouă aduce acest sit\npentru întreaga rețea?",
-             size=27, color=NAVY, bold=True, spacing=1.1)
-    add_body(s, M, 4.75, 11.2, 0.65,
-             "Nu cât de folosită este stația în sine.",
-             size=18, color=MUTED)
-    add_text(s, M, 5.65, 11.2, 0.55,
-             "Aceasta este întrebarea pe care o optimizăm.",
-             size=18, color=ORANGE, bold=True)
+    add_top(s, 4, "Model", "Două MLP-uri, două ținte separate.", size=30)
+    # architecture
+    add_text(s, M, 1.9, 5.2, 0.3, "ARHITECTURĂ", size=8.5, color=BLUE, bold=True)
+    for i, (label, x) in enumerate([("24", 0.9), ("256", 1.9), ("128", 2.9), ("64", 3.9), ("1", 4.9)]):
+        add_rect(s, x, 2.25, 0.7, 0.5, MIST if i < 4 else SOFT_ORANGE, LINE if i < 4 else ORANGE, radius=True)
+        add_text(s, x, 2.3, 0.7, 0.35, label, size=9, color=NAVY, bold=True,
+                 align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+    add_text(s, M, 2.95, 5.4, 0.35, "3 seed-uri independente · predicția = media lor", size=9, color=MUTED)
+    # target cards
+    box_text(s, M, 3.55, 2.65, 1.45,
+             "UTILIZARE\n27.324 stații\nlog(observed_usage)",
+             fill=SOFT_BLUE, line=BLUE, size=10, bold=False)
+    box_text(s, M + 2.9, 3.55, 2.65, 1.45,
+             "CREȘTERE\n350.187 candidați\nlog(U(S∪{i})−U(S))",
+             fill=SOFT_ORANGE, line=ORANGE, size=10, bold=False)
+    add_text(s, M, 5.35, 5.9, 1.3,
+             "MLP pentru că datele sunt tabelare, cu interacțiuni neliniare între competiție, acces și cerere. Inferența rulează local, pe CPU.",
+             size=10.5, color=NAVY, spacing=1.2)
+    add_text(s, M, 6.55, 5.9, 0.3,
+             "HGB a fost antrenat ca artefact de robustețe; validarea a ales MLP-ul (w=1.0).",
+             size=7.5, color=MUTED)
+    # split + test
+    add_rect(s, 7.0, 2.1, 5.5, 1.5, MIST, LINE, radius=True)
+    add_text(s, 7.18, 2.22, 5.0, 0.25, "SPLIT PE ORAȘE", size=8.5, color=MUTED, bold=True)
+    add_text(s, 7.18, 2.5, 5.0, 0.9,
+             "300 train  ·  40 validation\n40 test  ·  20 OOD",
+             size=16, color=NAVY, bold=True, spacing=1.25)
+    add_rect(s, 7.0, 3.85, 5.5, 1.5, SOFT_TEAL, TEAL, radius=True)
+    add_text(s, 7.18, 3.97, 5.0, 0.25, "TEST", size=8.5, color=RGBColor(0x06, 0x6B, 0x46), bold=True)
+    add_text(s, 7.18, 4.25, 5.0, 0.95,
+             "R² utilizare 0,871\nR² creștere 0,735",
+             size=15, color=RGBColor(0x06, 0x6B, 0x46), bold=True, spacing=1.25)
+    add_text(s, 7.0, 5.55, 5.4, 0.6,
+             "Fără latent demand, observed usage sau is_station în input.",
+             size=9.5, color=MUTED)
     add_footer(s, 4)
-    add_notes(s, "[1:05–1:25] Aici apare schimbarea importantă. Nu ne interesează doar cât de bună este o stație. Ne interesează diferența pe care o aduce pentru rețea. Este întrebarea care transformă problema într-una de decizie, nu doar de predicție.")
-    return s
-
-
-def slide_data_gap(prs, blank):
-    s = prs.slides.add_slide(blank)
-    add_top(s, 5, "De ce nu ajung datele reale", "Datele reale nu pot răspunde la această întrebare.")
-    # two columns
-    add_rect(s, M, 3.05, 5.7, 2.5, SOFT_BLUE, LINE, radius=True)
-    add_text(s, M + 0.25, 3.22, 5.2, 0.3, "CE ȘTIM", size=9, color=BLUE, bold=True)
-    add_text(s, M + 0.25, 3.55, 5.15, 1.5,
-             "Unde sunt stațiile.\nCât se folosesc astăzi.",
-             size=22, color=NAVY, bold=True, spacing=1.3)
-    add_rect(s, 6.6, 3.05, 5.9, 2.5, SOFT_ORANGE, ORANGE, radius=True)
-    add_text(s, 6.85, 3.22, 5.35, 0.3, "CE NU ȘTIM", size=9, color=RGBColor(0x93, 0x44, 0x00), bold=True)
-    add_text(s, 6.85, 3.55, 5.3, 1.5,
-             "Ce s-ar fi întâmplat\ndacă stația ar fi fost\nîn altă parte.",
-             size=22, color=RGBColor(0x7A, 0x3D, 0x00), bold=True, spacing=1.25)
-    add_text(s, M, 6.0, 11.4, 0.5,
-             "Iar stațiile existente au fost deja puse în locuri bune. Nu sunt o probă aleatoare.",
-             size=14, color=MUTED)
-    add_footer(s, 5)
-    add_notes(s, "[1:25–1:50] Datele reale ne spun unde sunt stațiile și cât se folosesc. Nu ne spun ce s-ar fi întâmplat dacă erau în altă parte. Iar stațiile existente nu sunt amplasate aleatoriu: operatorii le-au pus deja în locuri în care se așteptau la cerere. Așa că avem nevoie de altceva.")
-    return s
-
-
-def slide_simulator(prs, blank):
-    s = prs.slides.add_slide(blank)
-    add_top(s, 6, "Soluția", "Așa că am construit un oraș pe care îl putem întreba.")
-    add_image(s, ASSETS / "map-canvas.png", M, 2.0, 5.1, 4.75)
-    add_text(s, 6.2, 2.0, 5.9, 0.45, "400 de orașe sintetice.", size=25, color=NAVY, bold=True)
-    add_text(s, 6.2, 2.55, 6.0, 0.55, "501.812 noduri. 36.809 stații existente.", size=15, color=BLUE, bold=True)
-    add_body(s, 6.2, 3.3, 6.0, 1.35,
-             "Fiecare nod are o cerere ascunsă și vecini.\nPutem muta stațiile oriunde și putem vedea\nce se întâmplă cu întreaga rețea.",
-             size=16, spacing=1.25)
-    add_text(s, 6.2, 5.2, 5.95, 0.5,
-             "Nu este București. Este un loc controlat.",
-             size=14, color=ORANGE, bold=True)
-    add_footer(s, 6)
-    add_notes(s, "[1:50–2:15] Am construit un simulator cu 400 de orașe. Fiecare are o cerere ascunsă și stații existente. Pentru că totul este generat de cod, putem pune stații oriunde și putem măsura rezultatul. Nu pretindem că este București: este un teren controlat în care putem experimenta.")
-    return s
-
-
-def slide_separation(prs, blank):
-    s = prs.slides.add_slide(blank)
-    add_top(s, 7, "Cum rămâne testul corect", "Simulatorul știe răspunsul. Modelul vede doar indiciile.")
-    add_rect(s, M, 2.55, 5.6, 3.2, SOFT_BLUE, LINE, radius=True)
-    add_text(s, M + 0.25, 2.75, 5.1, 0.3, "SIMULATORUL", size=9, color=BLUE, bold=True)
-    add_body(s, M + 0.25, 3.1, 5.1, 2.3,
-             "•  cererea ascunsă\n•  efectul oricărei stații\n•  răspunsul corect",
-             size=18, spacing=1.5)
-    add_rect(s, 6.55, 2.55, 5.95, 3.2, SOFT_ORANGE, ORANGE, radius=True)
-    add_text(s, 6.8, 2.75, 5.4, 0.3, "MODELUL", size=9, color=RGBColor(0x93, 0x44, 0x00), bold=True)
-    add_body(s, 6.8, 3.1, 5.4, 2.3,
-             "•  populație și activitate\n•  acces și infrastructură\n•  competiția existentă",
-             size=18, spacing=1.5)
-    add_text(s, M, 6.15, 11.3, 0.5, "Așa modelul nu poate trișa.", size=16, color=ORANGE, bold=True)
-    add_footer(s, 7)
-    add_notes(s, "[2:15–2:35] Separarea este esențială. Simulatorul știe cererea reală și poate spune ce se întâmplă în orice scenariu. Modelul vede doar lucruri pe care un operator le-ar putea ști înainte să construiască: populație, activitate, acces, competiție. Nu vede răspunsul.")
-    return s
-
-
-def slide_two_questions(prs, blank):
-    s = prs.slides.add_slide(blank)
-    add_top(s, 8, "Partea de învățare", "Modelul învață două întrebări diferite.")
-    add_rect(s, M, 2.15, 5.8, 2.8, WHITE, LINE, radius=True)
-    add_text(s, M + 0.25, 2.35, 5.3, 0.3, "ÎNTREBAREA 1", size=9, color=BLUE, bold=True)
-    add_text(s, M + 0.25, 2.75, 5.3, 0.8, "Cât se folosește\no stație?", size=24, color=NAVY, bold=True, spacing=1.1)
-    add_text(s, M + 0.25, 3.85, 5.2, 0.7, "Ne ajută să estimăm valoarea absolută.", size=13, color=MUTED)
-    add_rect(s, 6.8, 2.15, 5.7, 2.8, SOFT_ORANGE, ORANGE, radius=True)
-    add_text(s, 7.05, 2.35, 5.2, 0.3, "ÎNTREBAREA 2", size=9, color=RGBColor(0x93, 0x44, 0x00), bold=True)
-    add_text(s, 7.05, 2.75, 5.2, 0.8, "Câtă cerere nouă\naduce?", size=24, color=NAVY, bold=True, spacing=1.1)
-    add_text(s, 7.05, 3.85, 5.1, 0.7, "Este întrebarea care decide unde punem stația.", size=13, color=RGBColor(0x7A, 0x3D, 0x00))
-    add_text(s, M, 5.55, 11.4, 0.65,
-             "A doua întrebare este cea care contează pentru business.",
-             size=17, color=ORANGE, bold=True)
-    add_text(s, M, 6.25, 11.2, 0.35,
-             "Aici intră partea de machine learning; restul este decizie.",
-             size=11, color=MUTED)
-    add_footer(s, 8)
-    add_notes(s, "[2:35–2:55] Modelul nu învață un singur lucru. Primul model estimează cât se folosește o stație. Al doilea estimează câtă cerere nouă aduce pentru rețea. A doua întrebare este cea care contează pentru alegerea amplasării. Aici este partea de ML; nu trebuie să știm formulele ca să înțelegem decizia.")
+    add_notes(s, "[1:35–2:15] Antrenăm două MLP-uri cu aceeași arhitectură: 24 de inputuri, straturi 256, 128 și 64, o ieșire. Primul prezice utilizarea stațiilor existente. Al doilea prezice creșterea incrementală pentru candidați; aceasta este ținta relevantă pentru decizie. Folosim trei seed-uri, iar media lor este predicția; dezacordul dintre ele este semnalul de incertitudine. MLP-ul se potrivește datelor tabelare, are interacțiuni neliniare și rulează local. Splitul este pe orașe: 300 train, 40 validation, 40 test, 20 OOD.")
     return s
 
 
 def slide_greedy(prs, blank):
     s = prs.slides.add_slide(blank)
-    add_top(s, 9, "Cum se alege", "Alegerea se face pas cu pas.")
-    add_body(s, M, 2.1, 11.2, 0.55,
-             "După fiecare alegere, siturile vecine devin mai puțin atractive.",
-             size=18)
-    # eight steps
-    for i in range(8):
-        x = 1.35 + i * 1.42
-        fill = ORANGE if i < 3 else (RGBColor(0xFF, 0xF1, 0xE2) if i == 3 else MIST)
-        line = ORANGE if i < 4 else LINE
-        add_rect(s, x, 3.55, 1.0, 0.72, fill, line, radius=True)
-        add_text(s, x, 3.62, 1.0, 0.55, str(i + 1), size=22,
-                 color=WHITE if i < 3 else NAVY, bold=True, align=PP_ALIGN.CENTER,
-                 anchor=MSO_ANCHOR.MIDDLE)
-    # connecting line
-    add_rect(s, 1.8, 4.82, 9.9, 0.02, LINE)
-    add_text(s, 1.35, 5.02, 10.7, 0.45,
-             "La fiecare pas, modelul recalculează toți candidații rămași.",
-             size=12, color=MUTED)
-    add_rect(s, M, 5.85, SW - 2 * M, 0.78, SOFT_ORANGE, ORANGE, radius=True)
-    add_text(s, M + 0.3, 5.95, SW - 2 * M - 0.6, 0.55,
-             "Altfel, toate cele opt stații ar putea ajunge în același cartier.",
-             size=15, color=RGBColor(0x7A, 0x3D, 0x00), bold=True,
-             anchor=MSO_ANCHOR.MIDDLE)
-    add_footer(s, 9)
-    add_notes(s, "[2:55–3:20] Alegerea nu se face dintr-o singură formulă globală. Se face pas cu pas: alegem un sit, apoi recalculăm și penalizăm candidații apropiați. Altfel, toate cele opt stații ar putea ajunge în același cartier și ar intra în competiție una cu alta.")
-    return s
-
-
-def slide_k(prs, blank):
-    s = prs.slides.add_slide(blank)
-    add_top(s, 10, "Bugetul", "Câte stații punem? K este bugetul.", title_size=32)
-    add_image(s, ASSETS / "k-card.png", 7.0, 1.85, 3.25, 3.9)
-    add_text(s, M, 2.0, 5.5, 0.45, "K=8 este benchmark-ul.", size=24, color=NAVY, bold=True)
-    add_body(s, M, 2.65, 5.4, 1.05,
-             "În interfață poți alege orice valoare\nîntre 1 și 12.",
-             size=18, spacing=1.25)
-    add_body(s, M, 3.95, 5.5, 1.1,
-             "Schimbi K și se schimbă lista, harta,\nclasamentul și captura din referință.",
-             size=14, color=MUTED, spacing=1.2)
-    add_text(s, M, 5.35, 5.7, 0.45,
-             "Peste 8 este o extensie demo; CSV-ul original rămâne K=8.",
-             size=11, color=ORANGE, bold=True)
-    add_text(s, 7.0, 5.95, 3.4, 0.3, "Exemplu: K=3 pe un oraș", size=9, color=MUTED,
-             align=PP_ALIGN.CENTER)
-    add_footer(s, 10)
-    add_notes(s, "[3:20–3:45] K este bugetul. Benchmark-ul nostru este K=8, dar interfața permite și K=1–12. Când schimbi K, se schimbă lista, harta și captura din referință. Peste 8 este o extensie demo, iar CSV-ul original rămâne K=8. Nu ascundem diferența.")
-    return s
-
-
-def slide_why(prs, blank):
-    s = prs.slides.add_slide(blank)
-    add_top(s, 11, "Explicația", "Fiecare alegere poate fi întrebată: de ce aici?")
-    add_image(s, ASSETS / "why.png", 6.8, 1.75, 5.1, 5.0)
-    add_text(s, M, 2.05, 5.7, 0.4, "Nu arătăm doar un punct.", size=22, color=NAVY, bold=True)
-    add_text(s, M, 2.55, 5.7, 0.4, "Arătăm decizia din spatele lui.", size=22, color=ORANGE, bold=True)
-    add_body(s, M, 3.35, 5.55, 2.1,
-             "•  rangul în buget\n•  factorii care au contat\n•  contextul și încrederea",
-             size=17, spacing=1.45)
-    add_text(s, M, 5.75, 5.5, 0.5,
-             "Fiecare explicație se termină cu rândul CSV.",
-             size=11, color=MUTED)
-    add_footer(s, 11)
-    add_notes(s, "[3:45–4:05] Aici este partea de produs care ne place cel mai mult. Nu arătăm doar un punct pe hartă. Când apeși pe un sit, vezi rangul, factorii care au contat, contextul și încrederea. Iar la final vezi rândul CSV exact. Decizia poate fi verificată.")
+    add_top(s, 5, "Selecție", "Greedy cu penalizare de canibalizare.", size=30)
+    add_rect(s, M, 1.9, 6.2, 1.35, NAVY, NAVY, radius=True)
+    add_text(s, M + 0.22, 2.03, 5.8, 0.25, "SCORUL FIECĂRUI CANDIDAT", size=8.5, color=RGBColor(0x9F, 0xC5, 0xE8), bold=True)
+    add_text(s, M + 0.22, 2.35, 5.8, 0.65,
+             "score_i = creștere_i / (1 + α · Σ_selected exp(−d_ij / λ))",
+             size=13.5, color=WHITE, bold=True)
+    add_text(s, M, 3.45, 6.0, 1.0,
+             "Se alege un sit, se recalculează candidații, se penalizează vecinătatea, se repetă până la K.",
+             size=11.5, color=NAVY, spacing=1.2)
+    add_text(s, M, 4.65, 6.0, 0.35, "α = 1,0, ales pe validare.", size=12, color=ORANGE, bold=True)
+    add_text(s, M, 5.1, 6.0, 0.8,
+             "Fără penalizare: 66,5% captură.\nCu α=1,0: 85,2% pe validare.",
+             size=11.5, color=MUTED, spacing=1.2)
+    add_text(s, M, 6.15, 6.0, 0.35,
+             "K=8 benchmark; interfața permite K=1–12.", size=9.5, color=MUTED)
+    # ablation bars
+    add_text(s, 7.0, 1.95, 5.6, 0.3, "ABLAȚIE PE VALIDARE", size=8.5, color=MUTED, bold=True)
+    for i, (label, value, color) in enumerate([
+        ("fără penalizare", 66.5, MUTED),
+        ("α=0,5", 82.9, BLUE),
+        ("α=1,0", 85.2, ORANGE),
+        ("α=2,0", 84.9, TEAL),
+    ]):
+        y = 2.45 + i * 0.78
+        add_text(s, 7.0, y, 1.65, 0.25, label, size=10, color=NAVY)
+        add_rect(s, 8.75, y + 0.02, 2.9, 0.17, RGBColor(0xEC, 0xF2, 0xF9), None, radius=True)
+        add_rect(s, 8.75, y + 0.02, max(0.08, 2.9 * value / 100), 0.17, color, None, radius=True)
+        add_text(s, 11.8, y - 0.02, 0.7, 0.26, f"{value:.1f}%", size=10, color=color, bold=True,
+                 align=PP_ALIGN.RIGHT)
+    add_text(s, 7.0, 5.85, 5.4, 0.55,
+             "Greedy este transparent și respectă bugetul, dar nu este optim global.",
+             size=9.5, color=MUTED)
+    add_footer(s, 5)
+    add_notes(s, "[2:15–2:55] Pentru selecție folosim un greedy cu penalizare de canibalizare. Fiecare candidat are un scor egal cu creșterea estimată împărțită la un factor care crește când situl este aproape de stațiile deja alese. Alpha a fost ales pe validare; fără penalizare captura este 66,5%, cu alpha 1,0 este 85,2%. Greedy este ușor de explicat și respectă bugetul, dar nu este optim global. K=8 este benchmark-ul; interfața permite 1–12, iar peste 8 este extensie demo.")
     return s
 
 
 def slide_results(prs, blank):
     s = prs.slides.add_slide(blank)
-    add_top(s, 12, "Rezultatul", "85,5% din beneficiul unei soluții perfecte.")
-    add_text(s, M, 2.0, 4.4, 0.3, "K=8  ·  40 DE ORAȘE DE TEST", size=9, color=MUTED, bold=True)
-    add_text(s, M, 2.35, 3.9, 1.2, "85,5%", size=62, color=ORANGE, bold=True)
-    add_text(s, M, 3.55, 4.3, 0.7, "din beneficiul incremental\n al referinței perfecte", size=14, color=NAVY, bold=True, spacing=1.1)
-    add_text(s, M, 4.55, 4.4, 0.6, "Aproape opt ori mai bine\ndecât „unde e populație”.", size=13, color=MUTED, spacing=1.15)
-    # bars
-    add_text(s, 5.85, 2.0, 6.6, 0.3, "CÂT DIN BENEFICIU CAPTUREAZĂ", size=9, color=MUTED, bold=True)
+    add_top(s, 6, "Rezultate", "Captură de 85,5% pe 40 de orașe de test.", size=30)
+    add_text(s, M, 1.95, 5.5, 0.3, "K=8  ·  ORAȘE NEVĂZUTE", size=8.5, color=MUTED, bold=True)
+    add_text(s, M, 2.3, 3.5, 0.9, "85,5%", size=52, color=ORANGE, bold=True)
+    add_text(s, M, 3.2, 5.4, 0.4, "din beneficiul incremental al referinței perfecte", size=12, color=NAVY, bold=True)
+    add_text(s, M, 3.75, 5.4, 0.4, "Regret 14,5%  ·  overlap 41,3%", size=10, color=MUTED)
+    add_text(s, M, 4.2, 5.4, 0.4, "OOD 88,4%  ·  14 review  ·  320 acțiuni", size=10, color=MUTED)
+    # metric table
+    rows = [
+        ("R² utilizare", "0,871", "Spearman", "0,931"),
+        ("R² creștere", "0,735", "Spearman", "0,801"),
+        ("MAE utilizare", "2,12", "MAE creștere", "1,35"),
+    ]
+    for i, (l1, v1, l2, v2) in enumerate(rows):
+        y = 5.0 + i * 0.45
+        add_text(s, M, y, 1.3, 0.3, l1, size=8.5, color=MUTED)
+        add_text(s, M + 1.35, y - 0.02, 0.65, 0.3, v1, size=11, color=NAVY, bold=True)
+        add_text(s, M + 2.15, y, 1.2, 0.3, l2, size=8.5, color=MUTED)
+        add_text(s, M + 3.4, y - 0.02, 0.6, 0.3, v2, size=11, color=NAVY, bold=True)
+    # baseline bars
+    add_text(s, 6.8, 1.95, 5.7, 0.3, "CAPTURĂ DIN REFERINȚĂ", size=8.5, color=MUTED, bold=True)
     bars = [
-        ("Modelul nostru", 85.5, "85,5%", ORANGE),
-        ("După populație", 11.3, "11,3%", BLUE),
+        ("Model + greedy", 85.5, "85,5%", ORANGE),
+        ("Populație", 11.3, "11,3%", BLUE),
         ("Aleator", 8.7, "8,7%", TEAL),
         ("Index manual", 7.5, "7,5%", NAVY),
-        ("După activitate", 5.2, "5,2%", MUTED),
+        ("Activitate", 5.2, "5,2%", MUTED),
     ]
     for i, (label, value, text, color) in enumerate(bars):
-        y = 2.5 + i * 0.68
-        add_text(s, 5.85, y, 1.8, 0.25, label, size=10.5, color=NAVY, bold=(i == 0))
-        add_rect(s, 7.75, y + 0.02, 3.6, 0.16, RGBColor(0xEC, 0xF2, 0xF9), None, radius=True)
-        add_rect(s, 7.75, y + 0.02, max(0.08, 3.6 * value / 100), 0.16, color, None, radius=True)
-        add_text(s, 11.45, y - 0.04, 0.85, 0.28, text, size=10.5, color=color, bold=True,
+        y = 2.45 + i * 0.72
+        add_text(s, 6.8, y, 1.55, 0.25, label, size=9.5, color=NAVY, bold=(i == 0))
+        add_rect(s, 8.5, y + 0.02, 3.2, 0.17, RGBColor(0xEC, 0xF2, 0xF9), None, radius=True)
+        add_rect(s, 8.5, y + 0.02, max(0.08, 3.2 * value / 100), 0.17, color, None, radius=True)
+        add_text(s, 11.9, y - 0.02, 0.75, 0.26, text, size=9.5, color=color, bold=True,
                  align=PP_ALIGN.RIGHT)
-    add_text(s, M, 6.1, 11.5, 0.55,
-             "Nu este 100% și nu este optim global. Este un rezultat măsurat pe orașe nevăzute.",
-             size=11.5, color=MUTED)
-    add_footer(s, 12)
-    add_notes(s, "[4:05–4:30] Pe 40 de orașe nevăzute, modelul capturează 85,5% din beneficiul unei soluții care știe adevărul. O regulă simplă care pune stații după populație ia 11,3%. Este o diferență de aproape opt ori. Nu este 100% și nu este optim global: este un rezultat măsurat, cu limitele la vedere.")
+    add_text(s, 6.8, 6.15, 5.7, 0.5,
+             "Cel mai slab oraș: 60,8%. Cel mai bun: 98,8%. Media ascunde variația.",
+             size=9.5, color=MUTED)
+    add_footer(s, 6)
+    add_notes(s, "[2:55–3:35] Pe 40 de orașe de test, modelul capturează 85,5% din beneficiul incremental al referinței perfecte. Regretul este 14,5%, iar suprapunerea exactă cu referința este 41,3%; situri diferite pot avea valori apropiate. Baseline-ul cu populația ia 11,3%, aleatorul 8,7%. Pe orașele OOD captura este 88,4%. Cel mai slab oraș are 60,8%, cel mai bun 98,8%; media ascunde variația, de aceea analizăm erorile pe orașe.")
     return s
 
 
-def slide_close(prs, blank):
+def slide_product(prs, blank):
     s = prs.slides.add_slide(blank)
-    add_top(s, 13, "Închidere", "Ce am decis și ce nu pretindem.", title_size=34)
-    # decisions
-    decisions = [
-        ("AM OPTIMIZAT", "rețeaua,\nnu stația izolată", SOFT_TEAL, TEAL),
-        ("AM CONSTRUIT", "un benchmark\ncontrolat", SOFT_BLUE, BLUE),
-        ("AM LĂSAT", "omul în buclă\npentru cazurile incerte", SOFT_ORANGE, ORANGE),
+    add_top(s, 7, "Produs", "Fiecare recomandare are o explicație și un rând CSV.", size=27)
+    add_image(s, ASSETS / "why.png", 6.75, 1.8, 5.1, 4.95)
+    add_text(s, M, 1.95, 5.6, 0.35, "Harta arată unde. Panoul arată de ce.", size=16, color=NAVY, bold=True)
+    add_text(s, M, 2.45, 5.55, 2.5,
+             "•  rang, creștere estimată, utilizare și încredere\n"
+             "•  factori locali cu valoare și mediană\n"
+             "•  contextul sitului și motivul de review\n"
+             "•  rândul CSV care a produs recomandarea",
+             size=10.5, color=NAVY, spacing=1.35)
+    add_text(s, M, 4.95, 5.4, 0.8,
+             "K se schimbă din interfață: 1–12. Peste K=8, recomandarea este extensie demo și nu are rând CSV.",
+             size=9.5, color=ORANGE, bold=True, spacing=1.2)
+    add_text(s, M, 5.9, 5.4, 0.7,
+             "Ieșiri: priority_sites.csv, review_queue.csv, dashboard.json.",
+             size=8.5, color=MUTED)
+    add_footer(s, 7)
+    add_notes(s, "[3:35–4:15] Interfața arată harta cu noduri, stații existente și situri recomandate. La click, panoul afișează rangul, creșterea estimată, utilizarea, încrederea, factorii locali cu valoare și mediană, contextul și motivul de review. Fiecare explicație se termină cu rândul CSV exact. K se schimbă din interfață; peste 8 este extensie demo și nu are rând CSV. Ieșirile sunt CSV-ul de acțiuni, coada de review și bundle-ul dashboardului.")
+    return s
+
+
+def slide_limits(prs, blank):
+    s = prs.slides.add_slide(blank)
+    add_top(s, 8, "Limite", "Ce am ales și ce rămâne de validat.", size=30)
+    columns = [
+        ("ALEGERI", [
+            "Simulator Huff pentru contrafactuale.",
+            "Două MLP-uri, cu ținte separate.",
+            "Greedy cu α=1,0 și K configurabil.",
+            "Explicație până la rândul CSV.",
+        ], SOFT_TEAL, TEAL),
+        ("LIMITE", [
+            "Date sintetice, nu București real.",
+            "Greedy nu este optim global.",
+            "Fără imputer pentru date lipsă.",
+            "Fără costuri, permisare sau rețea reală.",
+        ], SOFT_ORANGE, ORANGE),
+        ("URMEAZĂ", [
+            "Calibrare pe date reale.",
+            "Costuri, capacitate de rețea, permisare.",
+            "Pilot cu review uman.",
+            "Validarea pragurilor de încredere.",
+        ], SOFT_BLUE, BLUE),
     ]
-    for i, (head, body, fill, line) in enumerate(decisions):
+    for i, (head, items, fill, line) in enumerate(columns):
         x = M + i * 4.05
-        add_rect(s, x, 2.1, 3.7, 1.9, fill, line, radius=True)
-        add_text(s, x + 0.2, 2.25, 3.3, 0.25, head, size=8.5, color=line, bold=True)
-        add_text(s, x + 0.2, 2.6, 3.25, 0.95, body, size=17, color=NAVY, bold=True, spacing=1.12)
-    add_text(s, M, 4.45, 5.4, 0.3, "CE NU PRETINDEM", size=8.5, color=ORANGE, bold=True)
-    add_body(s, M, 4.75, 11.4, 1.0,
-             "Nu este o prognoză reală pentru București.  ·  Nu include costuri, permisare sau rețea reală.  ·  Nu este optim global.",
-             size=13, spacing=1.25)
-    add_text(s, M, 6.05, 11.5, 0.55,
-             "Un model care nu poate fi explicat nu este o decizie.",
-             size=18, color=NAVY, bold=True)
-    add_text(s, SW - 2.8, 6.1, 2.0, 0.4, "Întrebări?", size=16, color=ORANGE, bold=True,
+        add_rect(s, x, 2.0, 3.72, 3.0, fill, line, radius=True)
+        add_text(s, x + 0.2, 2.15, 3.3, 0.3, head, size=8.5, color=line, bold=True)
+        add_text(s, x + 0.2, 2.5, 3.3, 2.2, "\n".join("•  " + item for item in items),
+                 size=9.5, color=NAVY, spacing=1.45)
+    add_text(s, M, 5.45, 11.8, 0.5,
+             "Rezultatele sunt reproductibile din README; modelul rulează local, fără API extern.",
+             size=11, color=MUTED)
+    add_text(s, M, 6.0, 12.0, 0.45,
+             "Repository: github.com/Mach3tryhard/Smiling-F-Smarthack-2026  ·  PPT: docs/PPC_EV_Siting_Lab_5min.pptx",
+             size=9.5, color=NAVY, bold=True)
+    add_text(s, SW - 2.8, 6.55, 2.0, 0.35, "Întrebări?", size=14, color=ORANGE, bold=True,
              align=PP_ALIGN.RIGHT)
-    add_footer(s, 13)
-    add_notes(s, "[4:30–5:00] Am optimizat rețeaua, nu stația izolată. Am construit un benchmark controlat și am lăsat omul în buclă pentru cazurile incerte. Nu pretindem că este o prognoză pentru București, nu avem costuri sau permisare și nu este optim global. Un model care nu poate fi explicat nu este o decizie. Vă mulțumim; întrebări?")
-    return s
-
-
-def slide_appendix(prs, blank):
-    s = prs.slides.add_slide(blank)
-    add_top(s, 14, "Anexă pentru întrebări", "Dacă întreabă de partea tehnică.", title_size=30)
-    cards = [
-        ("24", "indicii pentru fiecare nod:\npopulație, acces, competiție,\ncontext urban", ORANGE),
-        ("2", "întrebări învățate:\ncât se folosește o stație\nși câtă cerere nouă aduce", BLUE),
-        ("3", "modele mici, cu seed-uri\ndiferite; dezacordul lor\neste semnal de incertitudine", TEAL),
-    ]
-    for i, (num, text, color) in enumerate(cards):
-        x = M + i * 4.05
-        add_rect(s, x, 2.0, 3.7, 2.0, WHITE, LINE, radius=True)
-        add_text(s, x + 0.2, 2.12, 0.7, 0.5, num, size=30, color=color, bold=True)
-        add_text(s, x + 0.85, 2.2, 2.65, 1.4, text, size=11.5, color=NAVY, spacing=1.2)
-    add_text(s, M, 4.35, 11.3, 0.4, "Testul este pe orașe, nu pe rânduri.", size=15, color=NAVY, bold=True)
-    add_text(s, M, 4.8, 11.3, 0.4, "Erorile sunt analizate pe orașe, nu ascunse într-o medie.", size=13, color=MUTED)
-    add_text(s, M, 5.3, 11.3, 0.4, "K=9–12 este extensie demo; CSV-ul original este K=8.", size=12, color=ORANGE, bold=True)
-    add_footer(s, 14)
-    add_notes(s, "Anexă pentru Q&A. Dacă întrebarea merge spre ML: 24 de indicii observabile, două întrebări diferite, trei modele mici cu seed-uri diferite. Testul este pe orașe, nu pe rânduri. Erorile sunt analizate pe orașe. K=9–12 este extensie demo; CSV-ul original este K=8.")
+    add_footer(s, 8)
+    add_notes(s, "[4:15–5:00] Alegerile principale sunt simulatorul Huff, cele două MLP-uri, greedy cu alpha 1,0 și explicația până la rândul CSV. Limitele sunt datele sintetice, faptul că greedy nu este optim global, lipsa unui imputer și lipsa costurilor, permisării și rețelei reale. Următorii pași sunt calibrarea pe date reale, costurile, pilotul cu review uman și validarea pragurilor. Rezultatele sunt reproductibile, modelul rulează local și repository-ul conține PPT-ul.")
     return s
 
 
@@ -455,19 +411,13 @@ def main():
     blank = prs.slide_layouts[6]
 
     slide_title(prs, blank)
-    slide_naive(prs, blank)
-    slide_cannibalization(prs, blank)
-    slide_question(prs, blank)
-    slide_data_gap(prs, blank)
-    slide_simulator(prs, blank)
-    slide_separation(prs, blank)
-    slide_two_questions(prs, blank)
+    slide_problem(prs, blank)
+    slide_huff(prs, blank)
+    slide_mlp(prs, blank)
     slide_greedy(prs, blank)
-    slide_k(prs, blank)
-    slide_why(prs, blank)
     slide_results(prs, blank)
-    slide_close(prs, blank)
-    slide_appendix(prs, blank)
+    slide_product(prs, blank)
+    slide_limits(prs, blank)
 
     prs.save(OUT)
     print(f"wrote {OUT} ({len(prs.slides)} slides)")
