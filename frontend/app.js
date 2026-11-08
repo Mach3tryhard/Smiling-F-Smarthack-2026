@@ -9,6 +9,7 @@
     cityId: null,
     selectedNode: null,
     whyActionId: null,
+    k: 8,
     view: "map",
     confidence: "all",
     reviewOnly: false,
@@ -39,30 +40,44 @@
   let canvas;
   let ctx;
 
-  const numberFmt = new Intl.NumberFormat("en-US");
+  const numberFmt = new Intl.NumberFormat("ro-RO");
+  const decimalFmt = (digits) => new Intl.NumberFormat("ro-RO", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
   const fmt = (value, digits = 1) => {
     if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
     const n = Number(value);
     if (Number.isInteger(n) && digits === 0) return numberFmt.format(n);
-    return n.toFixed(digits);
+    return decimalFmt(digits).format(n);
   };
   const pct = (value, digits = 1) => {
     if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
-    return `${(Number(value) * 100).toFixed(digits)}%`;
+    return `${fmt(Number(value) * 100, digits)}%`;
   };
   const esc = (value) =>
     String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 
   const currentCity = () => state.data?.cities.find((city) => city.city_id === state.cityId) || null;
+  const benchmarkK = () => Number(state.data?.benchmark_k) || 8;
+  const kMin = () => Number(state.data?.k_min) || 1;
+  const kMax = () => Number(state.data?.k_max) || 12;
+  const currentK = () => Math.max(kMin(), Math.min(kMax(), Number(state.k) || benchmarkK()));
+  const allActions = () => state.data?.all_actions || state.data?.actions || [];
+  const cityKSource = (city) => city?.k_actions || city?.actions || [];
+  const cityActions = (city = currentCity()) => cityKSource(city).filter((action) => Number(action.rank) <= currentK());
+  const actionsForK = () => allActions().filter((action) => Number(action.rank) <= currentK());
+  const currentPlacement = (city = currentCity()) => city?.k_placement?.[String(currentK())] || city?.placement || {};
+  const kMetric = () => state.data?.k_metrics?.[String(currentK())] || state.data?.metrics?.test_placement?.summary || state.data?.metrics?.test_placement || {};
 
   const currentAction = () => {
     const city = currentCity();
     if (!city || state.selectedNode === null) return null;
-    return city.actions.find((action) => action.node_id === Number(state.selectedNode)) || null;
+    return cityActions(city).find((action) => action.node_id === Number(state.selectedNode)) || null;
   };
 
   const actionAt = (city, nodeId) =>
-    city?.actions.find((action) => Number(action.node_id) === Number(nodeId)) || null;
+    cityActions(city).find((action) => Number(action.node_id) === Number(nodeId)) || null;
 
   const matchesFilters = (action) =>
     (state.confidence === "all" || action.confidence === state.confidence) &&
@@ -71,7 +86,7 @@
   function visibleCityActions() {
     const city = currentCity();
     if (!city) return [];
-    return city.actions.filter(matchesFilters);
+    return cityActions(city).filter(matchesFilters);
   }
 
   function syncFilterControls() {
@@ -87,11 +102,12 @@
   function renderConfidenceChips() {
     const city = currentCity();
     if (!city) return;
-    const counts = { all: city.actions.length, high: 0, medium: 0, low: 0 };
-    city.actions.forEach((action) => {
+    const actions = cityActions(city);
+    const counts = { all: actions.length, high: 0, medium: 0, low: 0 };
+    actions.forEach((action) => {
       counts[confidenceClass(action.confidence)] += 1;
     });
-    const labels = { all: "All", high: "High", medium: "Medium", low: "Low" };
+    const labels = { all: "Toate", high: "Ridicată", medium: "Medie", low: "Scăzută" };
     $$("#confidenceFilters .chip").forEach((chip) => {
       const key = chip.dataset.confidence;
       chip.innerHTML = `<span>${labels[key]}</span><b>${counts[key]}</b>`;
@@ -102,7 +118,7 @@
     });
     const hint = $("#filterHint");
     if (hint) {
-      hint.textContent = `${counts.high} high · ${counts.medium} medium · ${counts.low} low in this city. Filters apply to the map and the list.`;
+      hint.textContent = `${counts.high} ridicate · ${counts.medium} medii · ${counts.low} scăzute în acest oraș. Filtrele se aplică hărții și listei.`;
     }
   }
 
@@ -124,43 +140,78 @@
     drawMap();
   }
 
-  const actionById = (id) => state.data?.actions.find((action) => action.action_id === id) || null;
+  function syncKControl() {
+    const input = $("#kInput");
+    if (!input) return;
+    input.min = String(kMin());
+    input.max = String(kMax());
+    input.value = String(currentK());
+    const hint = $("#kHint");
+    if (hint) {
+      hint.textContent = currentK() === benchmarkK() ? `K=${currentK()} benchmark` : `K=${currentK()} ${currentK() > benchmarkK() ? "extensie demo" : "sub-buget"}`;
+    }
+    const note = $("#kNote");
+    if (note) {
+      note.textContent = currentK() > benchmarkK()
+        ? `K=${currentK()} depășește benchmark-ul K=8; recomandările suplimentare sunt o extensie demo generată cu același model.`
+        : currentK() < benchmarkK()
+          ? `K=${currentK()} afișează primele ${currentK()} recomandări din clasamentul K=8.`
+          : "K=8 este benchmark-ul original; 1–8 taie din clasament, 9–12 este o extensie demo.";
+    }
+  }
 
-  const confidenceLabel = (value) => ({ high: "High", medium: "Medium", low: "Low" }[value] || value);
+  function applyK(value) {
+    const next = Math.max(kMin(), Math.min(kMax(), Math.round(Number(value) || benchmarkK())));
+    if (next === currentK()) {
+      syncKControl();
+      return;
+    }
+    closeWhyModal();
+    state.k = next;
+    syncKControl();
+    ensureSelectionWithinFilters();
+    renderAll();
+    updateHash();
+  }
+
+  const actionById = (id) => allActions().find((action) => action.action_id === id) || null;
+
+  const confidenceLabel = (value) => ({ high: "Ridicată", medium: "Medie", low: "Scăzută" }[value] || value);
   const confidenceClass = (value) => (["high", "medium", "low"].includes(value) ? value : "low");
+  const statusLabel = (value) => ({ PROPOSED: "PROPUS", INSTALLED: "INSTALAT", REJECTED: "RESPINS" }[value] || value);
 
   const badge = (action) => {
     const review = action.requires_human_review
-      ? `<span class="badge review"><svg class="icon"><use href="#i-warning"></use></svg>Review</span>`
-      : `<span class="badge install"><svg class="icon"><use href="#i-check"></use></svg>Install</span>`;
+      ? `<span class="badge review"><svg class="icon"><use href="#i-warning"></use></svg>Verificare</span>`
+      : `<span class="badge install"><svg class="icon"><use href="#i-check"></use></svg>Recomandat</span>`;
     return `<span class="badge ${confidenceClass(action.confidence)}">${esc(confidenceLabel(action.confidence))} - ${fmt(action.confidence_score, 1)}</span>${review}`;
   };
 
   const FEATURE_META = {
-    population: { label: "Population index", digits: 2 },
-    activity: { label: "Activity / POI index", digits: 2 },
-    income: { label: "Income proxy", digits: 2 },
-    ev_adoption: { label: "EV adoption proxy", digits: 2 },
-    centrality: { label: "Centrality", digits: 2 },
-    road_capacity: { label: "Road capacity", digits: 2 },
-    transit_access: { label: "Transit access", digits: 2 },
-    highway_access: { label: "Highway access", digits: 2 },
-    parking: { label: "Parking index", digits: 2 },
-    poi_density: { label: "POI density", digits: 2 },
-    dist_center: { label: "Distance to centre", digits: 2 },
-    degree: { label: "Graph degree", digits: 0 },
-    closeness: { label: "Closeness", digits: 3 },
-    zone_business: { label: "Business zone share", digits: 2 },
-    zone_residential: { label: "Residential zone share", digits: 2 },
-    zone_industrial: { label: "Industrial zone share", digits: 2 },
-    competing_capacity: { label: "Nearby station capacity", digits: 2 },
-    n_stations_1km: { label: "Stations within 1 km", digits: 0 },
-    nearest_station_dist: { label: "Nearest station distance", digits: 3 },
-    local_population: { label: "Local population index", digits: 2 },
-    local_activity: { label: "Local activity index", digits: 2 },
-    planned_capacity: { label: "Planned capacity", digits: 2 },
-    city_nodes: { label: "City nodes", digits: 0 },
-    city_station_rate: { label: "City station rate", digits: 3 },
+    population: { label: "Index populație", digits: 2 },
+    activity: { label: "Index activitate / POI", digits: 2 },
+    income: { label: "Indicator venit", digits: 2 },
+    ev_adoption: { label: "Indicator adopție EV", digits: 2 },
+    centrality: { label: "Centralitate", digits: 2 },
+    road_capacity: { label: "Capacitate rutieră", digits: 2 },
+    transit_access: { label: "Acces transport", digits: 2 },
+    highway_access: { label: "Acces autostradă", digits: 2 },
+    parking: { label: "Index parcare", digits: 2 },
+    poi_density: { label: "Densitate POI", digits: 2 },
+    dist_center: { label: "Distanță față de centru", digits: 2 },
+    degree: { label: "Grad în graf", digits: 0 },
+    closeness: { label: "Centralitate de apropiere", digits: 3 },
+    zone_business: { label: "Pondere zonă de afaceri", digits: 2 },
+    zone_residential: { label: "Pondere zonă rezidențială", digits: 2 },
+    zone_industrial: { label: "Pondere zonă industrială", digits: 2 },
+    competing_capacity: { label: "Capacitate concurentă", digits: 2 },
+    n_stations_1km: { label: "Stații apropiate", digits: 0 },
+    nearest_station_dist: { label: "Distanță stație", digits: 3 },
+    local_population: { label: "Index populație locală", digits: 2 },
+    local_activity: { label: "Index activitate locală", digits: 2 },
+    planned_capacity: { label: "Capacitate planificată", digits: 2 },
+    city_nodes: { label: "Noduri în oraș", digits: 0 },
+    city_station_rate: { label: "Rată stații", digits: 3 },
   };
 
   const featureMeta = (feature) => FEATURE_META[feature] || { label: String(feature).replaceAll("_", " "), digits: 2 };
@@ -169,7 +220,7 @@
 
   function selectionSummary(action) {
     const city = currentCity();
-    const ordered = city ? [...city.actions].sort((a, b) => a.rank - b.rank) : [];
+    const ordered = city ? [...cityActions(city)].sort((a, b) => a.rank - b.rank) : [];
     const index = ordered.findIndex((item) => item.action_id === action.action_id);
     const next = index >= 0 ? ordered[index + 1] : null;
     const average = ordered.length ? ordered.reduce((sum, item) => sum + Number(item.predicted_uplift || 0), 0) / ordered.length : 0;
@@ -226,6 +277,7 @@
   function updateHash() {
     const params = new URLSearchParams();
     params.set("view", state.view);
+    params.set("k", String(currentK()));
     if (state.cityId) params.set("city", state.cityId);
     if (state.selectedNode !== null) params.set("node", String(state.selectedNode));
     history.replaceState(null, "", `#${params.toString()}`);
@@ -235,6 +287,8 @@
     const params = new URLSearchParams((location.hash || "").replace(/^#/, ""));
     const view = params.get("view");
     if (["map", "leaderboard", "csv", "model"].includes(view)) state.view = view;
+    const requestedK = Number(params.get("k"));
+    if (Number.isFinite(requestedK)) state.k = requestedK;
     const city = params.get("city");
     if (city && state.data.cities.some((item) => item.city_id === city)) state.cityId = city;
     const node = params.get("node");
@@ -255,7 +309,7 @@
     state.map.fitted = false;
     state.map.autoFit = true;
     const requestedNode = options.node !== undefined ? Number(options.node) : null;
-    if (requestedNode !== null && city.actions.some((action) => action.node_id === requestedNode)) {
+    if (requestedNode !== null && (cityKSource(city).some((action) => action.node_id === requestedNode) || city.nodes[requestedNode] !== undefined)) {
       state.selectedNode = requestedNode;
       const action = actionAt(city, requestedNode);
       if (action && !matchesFilters(action)) {
@@ -263,10 +317,10 @@
         state.reviewOnly = false;
       }
     } else if (previousCity !== city.city_id) {
-      state.selectedNode = city.actions[0]?.node_id ?? null;
+      state.selectedNode = cityActions(city)[0]?.node_id ?? null;
     }
-    if (state.selectedNode !== null && !city.actions.some((action) => action.node_id === Number(state.selectedNode)) && city.nodes[Number(state.selectedNode)] === undefined) {
-      state.selectedNode = city.actions[0]?.node_id ?? null;
+    if (state.selectedNode !== null && !cityKSource(city).some((action) => action.node_id === Number(state.selectedNode)) && city.nodes[Number(state.selectedNode)] === undefined) {
+      state.selectedNode = cityActions(city)[0]?.node_id ?? null;
     }
     ensureSelectionWithinFilters();
     renderAll();
@@ -341,6 +395,16 @@
     els.citySelect.addEventListener("change", (event) => selectCity(event.target.value));
     $("#prevCity").addEventListener("click", () => selectCity(state.data.cities[cityIndex(-1)].city_id));
     $("#nextCity").addEventListener("click", () => selectCity(state.data.cities[cityIndex(1)].city_id));
+    $("#kMinus").addEventListener("click", () => applyK(currentK() - 1));
+    $("#kPlus").addEventListener("click", () => applyK(currentK() + 1));
+    $("#kInput").addEventListener("change", (event) => applyK(event.target.value));
+    $("#kInput").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        applyK(event.target.value);
+        event.target.blur();
+      }
+    });
 
     $$("#confidenceFilters .chip").forEach((chip) => {
       chip.addEventListener("click", () => {
@@ -444,6 +508,7 @@
   }
 
   function renderAll() {
+    syncKControl();
     renderCityMeta();
     renderConfidenceChips();
     renderCityStats();
@@ -461,41 +526,42 @@
     const city = currentCity();
     if (!city) return;
     els.citySelect.value = city.city_id;
-    els.citySub.textContent = `${city.city_id} · ${fmt(city.n_nodes, 0)} nodes · ${fmt(city.n_existing, 0)} existing stations`;
-    const actions = city.actions;
+    els.citySub.textContent = `${city.city_id} · ${fmt(city.n_nodes, 0)} noduri · ${fmt(city.n_existing, 0)} stații existente`;
+    const actions = cityActions(city);
     const reviews = actions.filter((action) => action.requires_human_review).length;
+    const placement = currentPlacement(city);
     els.cityMiniStats.innerHTML = `
-      <div class="mini-stat"><span>Recommended</span><strong>${actions.length}</strong></div>
-      <div class="mini-stat"><span>Need review</span><strong>${reviews}</strong></div>
-      <div class="mini-stat"><span>Oracle capture</span><strong>${pct(city.placement.utility_ratio, 0)}</strong></div>
-      <div class="mini-stat"><span>Regret</span><strong>${pct(city.placement.regret, 0)}</strong></div>
+      <div class="mini-stat"><span>Recomandate</span><strong>${actions.length}</strong></div>
+      <div class="mini-stat"><span>De verificat</span><strong>${reviews}</strong></div>
+      <div class="mini-stat"><span>Captură oracol</span><strong>${pct(placement.utility_ratio, 0)}</strong></div>
+      <div class="mini-stat"><span>Regret</span><strong>${pct(placement.regret, 0)}</strong></div>
     `;
     els.mapTitle.textContent = city.city_id;
     const visible = visibleCityActions().length;
-    const siteLabel = visible === actions.length ? `${actions.length} recommendations` : `${visible} of ${actions.length} sites shown`;
+    const siteLabel = visible === actions.length ? `${actions.length} recomandări` : `${visible} din ${actions.length} situri afișate`;
     els.mapKpis.innerHTML = `
-      <span class="map-kpi"><span class="dot dot-node"></span>${fmt(city.n_nodes, 0)} nodes</span>
-      <span class="map-kpi"><span class="dot dot-station"></span>${fmt(city.n_existing, 0)} existing</span>
+      <span class="map-kpi"><span class="dot dot-node"></span>${fmt(city.n_nodes, 0)} noduri</span>
+      <span class="map-kpi"><span class="dot dot-station"></span>${fmt(city.n_existing, 0)} existente</span>
       <span class="map-kpi ${visible === actions.length ? "" : "is-filtered"}"><span class="dot dot-site"></span>${siteLabel}</span>
-      <span class="map-kpi">${reviews} review</span>
+      <span class="map-kpi">${reviews} de verificat</span>
     `;
   }
 
   function renderCityStats() {
     const city = currentCity();
     if (!city) return;
-    const placement = city.placement;
+    const placement = currentPlacement(city);
     const ratio = Math.max(0, Math.min(100, Number(placement.utility_ratio || 0) * 100));
     els.cityStats.innerHTML = `
       <div class="score-top">
-        <div class="score-ring" style="--pct:${ratio.toFixed(1)}"><span>${ratio.toFixed(1)}%</span></div>
-        <div class="score-copy"><strong>Oracle capture</strong><span>model vs greedy ground-truth oracle</span></div>
+        <div class="score-ring" style="--pct:${ratio.toFixed(1)}"><span>${fmt(ratio, 1)}%</span></div>
+        <div class="score-copy"><strong>Captură oracol</strong><span>model vs oracolul greedy bazat pe adevărul de referință</span></div>
       </div>
       <div class="score-rows">
         <div class="score-row"><span>Regret</span><strong>${pct(placement.regret)}</strong></div>
-        <div class="score-row"><span>Oracle overlap</span><strong>${pct(placement.oracle_overlap)}</strong></div>
-        <div class="score-row"><span>Uplift Spearman</span><strong>${fmt(placement.spearman_pred_vs_true_uplift, 3)}</strong></div>
-        <div class="score-row"><span>Random baseline</span><strong>${pct(placement.random_ratio)}</strong></div>
+        <div class="score-row"><span>Suprapunere cu oracolul</span><strong>${pct(placement.oracle_overlap)}</strong></div>
+        <div class="score-row"><span>Spearman creștere</span><strong>${fmt(placement.spearman_pred_vs_true_uplift, 3)}</strong></div>
+        <div class="score-row"><span>Referință aleatoare</span><strong>${pct(placement.random_ratio)}</strong></div>
       </div>
     `;
   }
@@ -503,13 +569,13 @@
   function renderCityScorecard() {
     const city = currentCity();
     if (!city) return;
-    const p = city.placement;
+    const p = currentPlacement(city);
     els.cityScorecard.innerHTML = `
-      <div class="stat"><span>Model incremental</span><strong>${fmt(p.model_incremental, 1)}</strong><small>sessions/day</small></div>
-      <div class="stat"><span>Oracle incremental</span><strong>${fmt(p.oracle_incremental, 1)}</strong><small>sessions/day</small></div>
-      <div class="stat"><span>Oracle capture</span><strong>${pct(p.utility_ratio)}</strong><small>of oracle gain</small></div>
-      <div class="stat"><span>Regret</span><strong>${pct(p.regret)}</strong><small>1 − capture</small></div>
-      <div class="stat wide"><span>City shape</span><strong>${fmt(city.n_nodes, 0)} nodes · ${fmt(city.n_existing, 0)} stations · ${city.actions.length} proposed</strong><small>simulated city, abstract coordinates</small></div>
+      <div class="stat"><span>Creștere model</span><strong>${fmt(p.model_incremental, 1)}</strong><small>sesiuni/zi</small></div>
+      <div class="stat"><span>Creștere oracol</span><strong>${fmt(p.oracle_incremental, 1)}</strong><small>sesiuni/zi</small></div>
+      <div class="stat"><span>Captură oracol</span><strong>${pct(p.utility_ratio)}</strong><small>din câștigul oracolului</small></div>
+      <div class="stat"><span>Regret</span><strong>${pct(p.regret)}</strong><small>1 − captură</small></div>
+      <div class="stat wide"><span>Structura orașului</span><strong>${fmt(city.n_nodes, 0)} noduri · ${fmt(city.n_existing, 0)} stații · ${currentK()} propuse</strong><small>oraș simulat, coordonate abstracte</small></div>
     `;
   }
 
@@ -526,9 +592,9 @@
     const city = currentCity();
     if (!city) return;
     const actions = activeCityActions();
-    els.cityActionCount.textContent = `${actions.length}/${city.actions.length}`;
+    els.cityActionCount.textContent = `${actions.length}/${currentK()}`;
     if (!actions.length) {
-      els.cityActionList.innerHTML = `<div class="empty-list">No sites match these filters.</div>`;
+      els.cityActionList.innerHTML = `<div class="empty-list">Niciun sit nu corespunde filtrelor.</div>`;
       return;
     }
     els.cityActionList.innerHTML = actions
@@ -538,21 +604,21 @@
         return `
           <button class="action-item ${selected ? "is-selected" : ""}" data-node="${action.node_id}">
             <span class="action-rank">${action.rank}</span>
-            <span><strong>${esc(action.action_id.replace("SYN-", ""))}</strong><small>${review} Node ${action.node_id} · ${esc(action.confidence)}</small></span>
-            <span class="action-value">${fmt(action.predicted_uplift, 1)}<small>uplift</small></span>
+            <span><strong>${esc(action.action_id.replace("SYN-", ""))}</strong><small>${review} Nod ${action.node_id} · ${esc(confidenceLabel(action.confidence))}</small></span>
+            <span class="action-value">${fmt(action.predicted_uplift, 1)}<small>creștere</small></span>
           </button>`;
       })
       .join("");
   }
 
   function renderTopRecommendations() {
-    const top = state.data.actions.slice(0, 6);
+    const top = actionsForK().sort((a, b) => Number(b.predicted_uplift) - Number(a.predicted_uplift)).slice(0, 6);
     els.topRecommendations.innerHTML = top
       .map((action, index) => `
         <button class="top-item" data-city="${esc(action.city_id)}" data-node="${action.node_id}">
-          <span class="top-rank" title="Position ${index + 1} in this list">${index + 1}</span>
-          <span><strong>${esc(action.city_id)} · Node ${action.node_id}</strong><small>${esc(action.confidence)} confidence · site rank ${action.rank}</small></span>
-          <span class="top-value">${fmt(action.predicted_uplift, 1)}<small>uplift</small></span>
+          <span class="top-rank" title="Poziția ${index + 1} în listă">${index + 1}</span>
+          <span><strong>${esc(action.city_id)} · Nod ${action.node_id}</strong><small>${esc(confidenceLabel(action.confidence))} încredere · rang ${action.rank} în oraș</small></span>
+          <span class="top-value">${fmt(action.predicted_uplift, 1)}<small>creștere</small></span>
         </button>`)
       .join("");
   }
@@ -566,7 +632,7 @@
           median: null,
           drop: Number(item.drop_sessions_per_day) || 0,
         })) : []);
-    if (!drivers.length) return `<div class="muted" style="font-size:10px">No local explanation stored.</div>`;
+    if (!drivers.length) return `<div class="muted" style="font-size:10px">Nu există o explicație locală salvată.</div>`;
     const max = Math.max(...drivers.map((item) => Math.abs(Number(item.drop) || 0)), 1);
     return drivers
       .slice(0, limit)
@@ -575,7 +641,7 @@
         const width = Math.max(4, (Math.abs(drop) / max) * 100);
         const hasValues = item.value !== null && item.value !== undefined && item.median !== null && item.median !== undefined;
         return `<div class="why-row">
-          <span class="feat"><strong>${esc(featureLabel(item.feature))}</strong><small>${hasValues ? `value ${featureValue(item.feature, item.value)} | city median ${featureValue(item.feature, item.median)}` : "local occlusion"}</small></span>
+          <span class="feat"><strong>${esc(featureLabel(item.feature))}</strong><small>${hasValues ? `valoare ${featureValue(item.feature, item.value)} | mediana orașului ${featureValue(item.feature, item.median)}` : "explicație locală"}</small></span>
           <span class="bar"><i style="width:${width.toFixed(1)}%"></i></span>
           <b>${drop > 0 ? "-" : "+"}${fmt(Math.abs(drop), 1)}</b>
         </div>`;
@@ -588,23 +654,24 @@
     const context = action.context || {};
     const medians = city?.medians || {};
     const keys = Object.keys(context);
-    if (!keys.length) return `<div class="muted" style="font-size:10px">No context values stored.</div>`;
+    if (!keys.length) return `<div class="muted" style="font-size:10px">Nu există valori de context salvate.</div>`;
     return `<div class="context-grid">${keys
-      .map((feature) => `<div class="context-item"><span>${esc(featureLabel(feature))}</span><strong>${featureValue(feature, context[feature])}</strong><small>city median ${featureValue(feature, medians[feature])}</small></div>`)
+      .map((feature) => `<div class="context-item" title="${esc(featureLabel(feature))}"><span>${esc(featureLabel(feature))}</span><strong>${featureValue(feature, context[feature])}</strong><small>mediana orașului ${featureValue(feature, medians[feature])}</small></div>`)
       .join("")}</div>`;
   }
 
   function selectionSentence(action) {
     const summary = selectionSummary(action);
+    const prior = summary.rank - 1;
     const position = summary.isFirst
-      ? "It was the first site selected."
+      ? "A fost primul sit selectat."
       : summary.isLast
-        ? "It was the last site selected within the budget."
-        : `It was selected after ${summary.rank - 1} higher-ranked site${summary.rank - 1 === 1 ? "" : "s"}.`;
+        ? "A fost ultimul sit selectat în buget."
+        : `A fost selectat după ${prior} ${prior === 1 ? "sit mai bine clasat" : "situri mai bine clasate"}.`;
     const next = summary.next
-      ? `The next selected site (rank ${summary.next.rank}) has a predicted uplift of ${fmt(summary.next.predicted_uplift, 2)} sessions/day.`
-      : "No lower-ranked site was selected in this city.";
-    return `${position} Its predicted uplift is ${fmt(action.predicted_uplift, 2)} sessions/day. ${next}`;
+      ? `Următorul sit selectat (rangul ${summary.next.rank}) are o creștere estimată de ${fmt(summary.next.predicted_uplift, 2)} sesiuni/zi.`
+      : "Nu a fost selectat niciun sit cu rang inferior în acest oraș.";
+    return `${position} Creșterea estimată pentru acest sit este de ${fmt(action.predicted_uplift, 2)} sesiuni/zi. ${next}`;
   }
 
   function selectionBlock(action) {
@@ -612,15 +679,15 @@
     const nextValue = summary.next ? fmt(summary.next.predicted_uplift, 2) : "-";
     const nextDelta = summary.deltaNext === null ? "-" : `${summary.deltaNext >= 0 ? "+" : ""}${fmt(summary.deltaNext, 2)}`;
     return `<div class="why-selection">
-      <div class="why-selection-head"><strong>Rank ${summary.rank} of ${summary.total}</strong><span>greedy K=${summary.total} selection</span></div>
+      <div class="why-selection-head"><strong>Rangul ${summary.rank} din ${summary.total}</strong><span>selecție greedy K=${summary.total}</span></div>
       <p>${esc(selectionSentence(action))}</p>
       <div class="why-figures">
-        <div><span>This site</span><strong>${fmt(action.predicted_uplift, 2)}</strong><small>sessions/day</small></div>
-        <div><span>Selected average</span><strong>${fmt(summary.average, 2)}</strong><small>sessions/day</small></div>
-        <div><span>Vs average</span><strong>${summary.deltaAverage >= 0 ? "+" : ""}${fmt(summary.deltaAverage, 2)}</strong><small>sessions/day</small></div>
-        <div><span>Next selected</span><strong>${nextValue}</strong><small>${nextDelta} vs next</small></div>
+        <div><span>Acest sit</span><strong>${fmt(action.predicted_uplift, 2)}</strong><small>sesiuni/zi</small></div>
+        <div><span>Media siturilor selectate</span><strong>${fmt(summary.average, 2)}</strong><small>sesiuni/zi</small></div>
+        <div><span>Față de medie</span><strong>${summary.deltaAverage >= 0 ? "+" : ""}${fmt(summary.deltaAverage, 2)}</strong><small>sesiuni/zi</small></div>
+        <div><span>Următorul selectat</span><strong>${nextValue}</strong><small>${nextDelta} față de următorul</small></div>
       </div>
-      <p class="why-note">The optimizer is greedy: it selects one site at a time, re-scores the remaining candidates after a penalty for proximity to already selected sites, and stops at K=${summary.total}. This is a constrained selection order, not a global optimum.</p>
+      <p class="why-note">Optimizatorul este greedy: alege câte un sit, recalculează candidații rămași după o penalizare pentru apropierea de siturile deja selectate și se oprește la K=${summary.total}. Este o ordine de selecție constrânsă, nu un optim global.</p>
     </div>`;
   }
 
@@ -629,41 +696,43 @@
     if (!action || !els.whyContent) return;
     const summary = selectionSummary(action);
     const review = action.requires_human_review
-      ? `<div class="review-alert"><svg class="icon"><use href="#i-warning"></use></svg><span>${esc(action.review_reason || "Flagged for human review.")}</span></div>`
+      ? `<div class="review-alert"><svg class="icon"><use href="#i-warning"></use></svg><span>${esc(action.review_reason || "Marcat pentru verificare umană.")}</span></div>`
       : "";
     els.whyContent.innerHTML = `
       <div class="why-hero">
-        <span class="rank-badge"><small>Rank</small><strong>${action.rank}</strong></span>
+        <span class="rank-badge"><small>Rang</small><strong>${action.rank}</strong></span>
         <div>
-          <h3>${esc(action.city_id)} | Node ${action.node_id}</h3>
-          <p>${esc(action.action_id)} | ${esc(action.status)}</p>
+          <h3>${esc(action.city_id)} | Nod ${action.node_id}</h3>
+          <p>${esc(action.action_id)} | ${esc(statusLabel(action.status))}</p>
         </div>
         <div class="badge-row">${badge(action)}</div>
       </div>
       ${selectionBlock(action)}
       <section class="why-section">
-        <h4>Why the agent chose this node</h4>
-        <p class="why-note">Each feature is replaced with this city's median and the model is re-scored. A negative impact means the actual value raises predicted uplift relative to a typical node; this is a local sensitivity, not a causal effect.</p>
+        <h4>De ce agentul a ales acest nod</h4>
+        <p class="why-note">Fiecare caracteristică este înlocuită cu mediana orașului, iar modelul este reevaluat. Un impact negativ înseamnă că valoarea reală ridică creșterea estimată față de un nod tipic; este o sensibilitate locală, nu un efect cauzal.</p>
         <div class="why-list">${driverRows(action, 5)}</div>
       </section>
       <section class="why-section">
-        <h4>Site context the model sees</h4>
+        <h4>Contextul sitului văzut de model</h4>
         ${contextGrid(action)}
       </section>
       <section class="why-section">
-        <h4>Confidence and review</h4>
+        <h4>Încredere și verificare</h4>
         <div class="meter-wrap">
-          <div class="meter-label"><span>Confidence score</span><span>${fmt(action.confidence_score, 1)} / 100</span></div>
+          <div class="meter-label"><span>Scor de încredere</span><span>${fmt(action.confidence_score, 1)} / 100</span></div>
           <div class="meter"><i style="width:${Math.max(0, Math.min(100, action.confidence_score))}%"></i></div>
         </div>
-        <p class="why-note">Confidence is derived from disagreement across the three MLP seeds. Ensemble spread: ${fmt(action.uncertainty, 2)} sessions/day.</p>
+        <p class="why-note">Încrederea provine din dezacordul dintre cele trei seed-uri MLP. Dispersia ansamblului: ${fmt(action.uncertainty, 2)} sesiuni/zi.</p>
         ${review}
       </section>
       <details class="why-csv">
-        <summary>Source CSV row</summary>
-        <div class="csv-block">${esc(action.csv_row)}</div>
+        <summary>Rândul CSV sursă</summary>
+        ${action.csv_row
+          ? `<div class="csv-block">${esc(action.csv_row)}</div>`
+          : `<div class="csv-block csv-unavailable">Disponibil doar pentru K≤8. Recomandările suplimentare pentru K&gt;8 sunt o extensie demo generată cu același model.</div>`}
       </details>
-      <p class="why-footnote">This is a prediction from the synthetic simulator model. It explains a model decision; it is not a real-world demand guarantee.</p>
+      <p class="why-footnote">Aceasta este o predicție a modelului antrenat pe simulatorul sintetic. Explică o decizie a modelului; nu este o garanție a cererii din lumea reală.</p>
     `;
   }
 
@@ -685,11 +754,11 @@
     const city = currentCity();
     const action = currentAction();
     if (!city || state.selectedNode === null) {
-      const hidden = city ? city.actions.length - visibleCityActions().length : 0;
+      const hidden = city ? currentK() - visibleCityActions().length : 0;
       const note = $("#emptyFilterNote");
       if (note) {
         note.hidden = hidden <= 0;
-        note.textContent = hidden > 0 ? `No sites match the current filter — ${hidden} hidden.` : "";
+        note.textContent = hidden > 0 ? `Niciun sit nu corespunde filtrului curent — ${hidden} ${hidden === 1 ? "sit ascuns" : "situri ascunse"}.` : "";
       }
       els.detailsEmpty.hidden = false;
       els.detailsContent.hidden = true;
@@ -705,43 +774,45 @@
       els.detailsContent.innerHTML = `
         <div class="details-top">
           <div class="details-head">
-            <span class="rank-badge"><small>Rank</small><strong>${action.rank}</strong></span>
+            <span class="rank-badge"><small>Rang</small><strong>${action.rank}</strong></span>
             <div class="details-title">
-              <h2>${esc(action.city_id)} · Node ${action.node_id}</h2>
-              <div class="sub">${esc(action.action_id)} · ${esc(action.status)}</div>
+              <h2>${esc(action.city_id)} · Nod ${action.node_id}</h2>
+              <div class="sub">${esc(action.action_id)} · ${esc(statusLabel(action.status))}</div>
             </div>
           </div>
           <div class="badge-row">${badge(action)}</div>
         </div>
         <div class="details-body">
           <div class="stat-grid">
-            <div class="stat"><span>Predicted uplift</span><strong>${fmt(action.predicted_uplift, 2)}</strong><small>sessions/day</small></div>
-            <div class="stat"><span>Predicted usage</span><strong>${fmt(action.predicted_usage, 2)}</strong><small>sessions/day</small></div>
-            <div class="stat"><span>Ensemble spread</span><strong>${fmt(action.uncertainty, 2)}</strong><small>± sessions/day</small></div>
-            <div class="stat"><span>Confidence score</span><strong>${fmt(action.confidence_score, 1)}</strong><small>/ 100</small></div>
+            <div class="stat"><span>Creștere estimată</span><strong>${fmt(action.predicted_uplift, 2)}</strong><small>sesiuni/zi</small></div>
+            <div class="stat"><span>Utilizare estimată</span><strong>${fmt(action.predicted_usage, 2)}</strong><small>sesiuni/zi</small></div>
+            <div class="stat"><span>Dispersia ansamblului</span><strong>${fmt(action.uncertainty, 2)}</strong><small>± sesiuni/zi</small></div>
+            <div class="stat"><span>Scor de încredere</span><strong>${fmt(action.confidence_score, 1)}</strong><small>/ 100</small></div>
           </div>
           <div class="meter-wrap">
-            <div class="meter-label"><span>Confidence meter</span><span>${fmt(action.confidence_score, 1)} / 100</span></div>
+            <div class="meter-label"><span>Indicator de încredere</span><span>${fmt(action.confidence_score, 1)} / 100</span></div>
             <div class="meter"><i style="width:${Math.max(0, Math.min(100, action.confidence_score))}%"></i></div>
           </div>
           ${review}
           <div class="why-detail">
-            <div class="why-detail-head"><div class="eyebrow">Why this node</div><span class="pill">Rank ${action.rank} of ${city.actions.length}</span></div>
+            <div class="why-detail-head"><div class="eyebrow">De ce acest nod</div><span class="pill">Rangul ${action.rank} din ${currentK()}</span></div>
             <p class="why-detail-copy">${esc(selectionSentence(action))}</p>
             <div class="why-list">${driverRows(action, 3)}</div>
-            <small class="why-detail-note">Impact = change in predicted uplift if the feature is reset to the city median.</small>
-            <button class="btn primary small" data-why-action="${esc(action.action_id)}"><svg class="icon"><use href="#i-search"></use></svg>Full explanation</button>
+            <small class="why-detail-note">Impactul = schimbarea creșterii estimate dacă valoarea este readusă la mediana orașului.</small>
+            <button class="btn primary small" data-why-action="${esc(action.action_id)}"><svg class="icon"><use href="#i-search"></use></svg>Explicație completă</button>
           </div>
           <div>
-            <div class="eyebrow">Actual CSV row</div>
-            <div class="csv-block">${esc(action.csv_row)}</div>
+            <div class="eyebrow">Rândul CSV real</div>
+            ${action.csv_row
+              ? `<div class="csv-block">${esc(action.csv_row)}</div>`
+              : `<div class="csv-block csv-unavailable">Rândul CSV este disponibil doar pentru K≤8. Această recomandare este o extensie demo generată pentru K&gt;8.</div>`}
           </div>
           <div class="details-actions">
-            <button class="btn ghost small" data-copy-action="${esc(action.action_id)}"><svg class="icon"><use href="#i-copy"></use></svg>Copy row</button>
-            <button class="btn ghost small" data-open-csv="${esc(action.action_id)}"><svg class="icon"><use href="#i-table"></use></svg>CSV view</button>
-            <button class="btn ghost small" data-rank-action="${esc(action.action_id)}"><svg class="icon"><use href="#i-chart"></use></svg>Rankings</button>
+            <button class="btn ghost small" data-copy-action="${esc(action.action_id)}" ${action.csv_row ? "" : "disabled"}><svg class="icon"><use href="#i-copy"></use></svg>Copiază rândul</button>
+            <button class="btn ghost small" data-open-csv="${esc(action.action_id)}"><svg class="icon"><use href="#i-table"></use></svg>Vezi CSV</button>
+            <button class="btn ghost small" data-rank-action="${esc(action.action_id)}"><svg class="icon"><use href="#i-chart"></use></svg>Clasament</button>
           </div>
-          <div class="details-hint">Double-click this site on the map for the full decision trace.</div>
+          <div class="details-hint">Dublu-click pe acest sit, pe hartă, pentru explicația completă.</div>
         </div>
       `;
       return;
@@ -752,16 +823,16 @@
     const [x, y, isStation, demand, capacity, observed] = node;
     const nearest = nearestAction(Number(state.selectedNode));
     const station = isStation
-      ? `<div class="stat-grid"><div class="stat"><span>Capacity</span><strong>${fmt(capacity, 2)}</strong><small>simulated units</small></div><div class="stat"><span>Observed usage</span><strong>${fmt(observed, 1)}</strong><small>sessions/day</small></div></div>`
-      : `<div class="stat-grid"><div class="stat"><span>Node type</span><strong>Candidate</strong><small>no existing station</small></div><div class="stat"><span>Simulator demand</span><strong>${fmt(demand, 1)}</strong><small>latent index</small></div></div>`;
+      ? `<div class="stat-grid"><div class="stat"><span>Capacitate</span><strong>${fmt(capacity, 2)}</strong><small>unități simulate</small></div><div class="stat"><span>Utilizare observată</span><strong>${fmt(observed, 1)}</strong><small>sesiuni/zi</small></div></div>`
+      : `<div class="stat-grid"><div class="stat"><span>Tip de nod</span><strong>Candidat</strong><small>fără stație existentă</small></div><div class="stat"><span>Cerere simulator</span><strong>${fmt(demand, 1)}</strong><small>index latent</small></div></div>`;
     els.detailsContent.innerHTML = `
       <div class="station-panel">
-        <div class="eyebrow">${isStation ? "Existing station" : "Candidate node"}</div>
-        <h2>Node ${state.selectedNode}</h2>
-        <p>${isStation ? "This node already has a simulated charging station. It is evidence, not a new recommendation." : "This node was not selected by the model. You can inspect it, but it is not in the recommendation set."}</p>
+        <div class="eyebrow">${isStation ? "Stație existentă" : "Nod candidat"}</div>
+        <h2>Nod ${state.selectedNode}</h2>
+        <p>${isStation ? "Acest nod are deja o stație de încărcare simulată. Este o dovadă, nu o recomandare nouă." : "Acest nod nu a fost selectat de model. Îl poți inspecta, dar nu face parte din setul de recomandări."}</p>
         ${station}
-        <div class="score-row"><span>Coordinates</span><strong>${fmt(x, 3)}, ${fmt(y, 3)}</strong></div>
-        ${nearest ? `<button class="btn primary small" data-nearest="${nearest.node_id}"><svg class="icon"><use href="#i-map"></use></svg>Nearest recommendation · rank ${nearest.rank}</button>` : ""}
+        <div class="score-row"><span>Coordonate</span><strong>${fmt(x, 3)}, ${fmt(y, 3)}</strong></div>
+        ${nearest ? `<button class="btn primary small" data-nearest="${nearest.node_id}"><svg class="icon"><use href="#i-map"></use></svg>Cea mai apropiată recomandare · rangul ${nearest.rank}</button>` : ""}
       </div>
     `;
   }
@@ -769,9 +840,9 @@
   function nearestAction(nodeId) {
     const city = currentCity();
     const node = city?.nodes[nodeId];
-    if (!node || !city.actions.length) return null;
+    if (!node || !cityActions(city).length) return null;
     let best = null;
-    city.actions.forEach((action) => {
+    cityActions(city).forEach((action) => {
       const other = city.nodes[action.node_id];
       if (!other) return;
       const distance = Math.hypot(other[0] - node[0], other[1] - node[1]);
@@ -784,7 +855,7 @@
     const copyButton = event.target.closest("[data-copy-action]");
     if (copyButton) {
       const action = actionById(copyButton.dataset.copyAction);
-      if (action) copyText(action.csv_row, "CSV row copied.");
+      if (action) copyText(action.csv_row, "Rândul CSV a fost copiat.");
       return;
     }
     const whyButton = event.target.closest("[data-why-action]");
@@ -826,7 +897,7 @@
       );
       if (row) row.scrollIntoView({ block: "center", behavior: "smooth" });
     });
-    toast(`Opened ${action.action_id} in Rankings`);
+    toast(`Deschis ${action.action_id} în Clasament`);
   }
 
   function onTableClick(event) {
@@ -839,7 +910,7 @@
   function renderLeaderboard() {
     if (!state.data) return;
     const query = state.lbSearch;
-    const filtered = state.data.actions
+    const filtered = actionsForK()
       .filter((action) => {
         if (state.lbConfidence !== "all" && action.confidence !== state.lbConfidence) return false;
         if (state.lbReview && !action.requires_human_review) return false;
@@ -862,17 +933,17 @@
             return `
               <tr data-city="${esc(action.city_id)}" data-node="${action.node_id}" class="${rowClass}">
                 <td class="num">${index + 1}</td>
-                <td><strong>${esc(action.action_id.replace("SYN-", ""))}</strong><div class="muted-cell">rank ${action.rank}</div></td>
+                <td><strong>${esc(action.action_id.replace("SYN-", ""))}</strong><div class="muted-cell">rang ${action.rank}</div></td>
                 <td class="city-cell">${esc(action.city_id)}</td>
                 <td class="num">${action.node_id}</td>
                 <td class="num"><span class="mini-bar"><i style="width:${Math.min(100, (action.predicted_uplift / 45) * 100).toFixed(1)}%"></i></span>${fmt(action.predicted_uplift, 1)}</td>
                 <td class="num">${fmt(action.predicted_usage, 1)}</td>
                 <td><span class="badge ${confidenceClass(action.confidence)}">${esc(confidenceLabel(action.confidence))}</span></td>
-                <td>${action.requires_human_review ? `<span class="badge review"><svg class="icon"><use href="#i-warning"></use></svg>Yes</span>` : `<span class="muted-cell">—</span>`}</td>
+                <td>${action.requires_human_review ? `<span class="badge review"><svg class="icon"><use href="#i-warning"></use></svg>Da</span>` : `<span class="muted-cell">—</span>`}</td>
               </tr>`;
           })
           .join("")
-      : `<tr><td colspan="8" class="table-empty">No rows match.</td></tr>`;
+      : `<tr><td colspan="8" class="table-empty">Niciun rând nu corespunde.</td></tr>`;
   }
 
   function renderCsv() {
@@ -901,7 +972,7 @@
             return `<tr data-city="${esc(action.city_id)}" data-node="${action.node_id}" class="${selected ? "is-selected" : ""}">${cells}</tr>`;
           })
           .join("")
-      : `<tr><td colspan="${header.length}" class="table-empty">No rows match.</td></tr>`;
+      : `<tr><td colspan="${header.length}" class="table-empty">Niciun rând nu corespunde.</td></tr>`;
   }
 
   function renderModel() {
@@ -909,27 +980,27 @@
     const metrics = state.data.metrics;
     const usage = metrics.test_usage.metrics || metrics.test_usage;
     const uplift = metrics.test_uplift.metrics || metrics.test_uplift;
-    const placement = metrics.test_placement.summary || metrics.test_placement;
+    const placement = kMetric();
     const shift = metrics.shift_placement.summary || metrics.shift_placement;
-    const review = state.data.review_count;
+    const review = actionsForK().filter((action) => action.requires_human_review).length;
     const cards = [
-      ["Usage R²", fmt(usage.r2_log, 3), "log target, held-out cities"],
-      ["Usage Spearman", fmt(usage.spearman, 3), "rank correlation"],
-      ["Uplift R²", fmt(uplift.r2_log, 3), "counterfactual target"],
-      ["Oracle capture", pct(placement.mean_utility_ratio), "K=8 test cities"],
-      ["OOD capture", pct(shift.mean_utility_ratio), "shifted cities"],
-      ["Review queue", fmt(review, 0), "human checks"],
+      ["R² utilizare", fmt(usage.r2_log, 3), "țintă log, orașe nevăzute"],
+      ["Spearman utilizare", fmt(usage.spearman, 3), "corelație de rang"],
+      ["R² creștere", fmt(uplift.r2_log, 3), "țintă contrafactuală"],
+      ["Captură oracol", pct(placement.mean_utility_ratio), `orașe de test K=${currentK()}`],
+      ["Captură OOD", pct(shift.mean_utility_ratio), "orașe deplasate, K=8"],
+      ["Coadă de verificare", fmt(review, 0), `verificări umane la K=${currentK()}`],
     ];
     els.modelKpis.innerHTML = cards
       .map(([label, value, sub]) => `<div class="kpi"><span>${label}</span><strong>${value}</strong><small>${sub}</small></div>`)
       .join("");
 
     const baselines = [
-      ["Model + optimizer", placement.mean_utility_ratio, true],
-      ["Random", placement.baseline_mean_ratios.random, false],
-      ["Population", placement.baseline_mean_ratios.population, false],
-      ["Hand index", placement.baseline_mean_ratios.hand_index, false],
-      ["Activity", placement.baseline_mean_ratios.activity, false],
+      ["Model + optimizator", placement.mean_utility_ratio, true],
+      ["Aleator", placement.baseline_mean_ratios.random, false],
+      ["Populație", placement.baseline_mean_ratios.population, false],
+      ["Index manual", placement.baseline_mean_ratios.hand_index, false],
+      ["Activitate", placement.baseline_mean_ratios.activity, false],
     ];
     els.baselineBars.innerHTML = baselines
       .map(([label, value, model]) => `<div class="bar-row ${model ? "is-model" : ""}"><span>${label}</span><span class="track"><i style="width:${Math.min(100, Number(value) * 100).toFixed(1)}%"></i></span><b>${pct(value)}</b></div>`)
@@ -938,23 +1009,28 @@
     const features = state.data.feature_importance.slice(0, 9);
     const maxFeature = Math.max(...features.map((item) => Number(item.mae_increase) || 0), 0.0001);
     els.featureBars.innerHTML = features
-      .map((item) => `<div class="bar-row"><span>${esc(String(item.feature).replaceAll("_", " "))}</span><span class="track"><i style="width:${((Number(item.mae_increase) / maxFeature) * 100).toFixed(1)}%"></i></span><b>${fmt(item.mae_increase, 2)}</b></div>`)
+      .map((item) => `<div class="bar-row"><span>${esc(featureLabel(item.feature))}</span><span class="track"><i style="width:${((Number(item.mae_increase) / maxFeature) * 100).toFixed(1)}%"></i></span><b>${fmt(item.mae_increase, 2)}</b></div>`)
       .join("");
 
     els.modelSteps.innerHTML = [
-      ["1", "Simulate ground truth", "Generate 400 graph cities with hidden demand, stations, and Huff competition."],
-      ["2", "Learn two targets", "Predict log usage at stations and log counterfactual uplift at candidates."],
-      ["3", "Optimize K sites", "Greedy uplift ranking with a spatial cannibalization penalty, tuned on validation."],
+      ["1", "Simulează adevărul de referință", "Generează 400 de orașe-graf cu cerere ascunsă, stații și competiție Huff."],
+      ["2", "Învață două ținte", "Prezice log-utilizarea la stații și creșterea contrafactuală la candidați."],
+      ["3", "Optimizează K situri", "Clasament greedy după uplift, cu penalizare spațială pentru canibalizare, reglat pe validare."],
     ]
       .map(([num, title, copy]) => `<div class="step"><span class="step-num">${num}</span><div><strong>${title}</strong><span>${copy}</span></div></div>`)
       .join("");
 
-    const cities = [...state.data.cities].sort((a, b) => b.placement.utility_ratio - a.placement.utility_ratio);
+    const cities = [...state.data.cities].sort((a, b) => {
+      const first = a.k_placement?.[String(currentK())]?.utility_ratio || 0;
+      const second = b.k_placement?.[String(currentK())]?.utility_ratio || 0;
+      return second - first;
+    });
     els.cityMosaic.innerHTML = cities
       .map((city) => {
-        const ratio = Math.max(0, Math.min(100, Number(city.placement.utility_ratio) * 100));
-        return `<button class="city-tile" data-city="${esc(city.city_id)}" title="${esc(city.city_id)} · ${pct(city.placement.utility_ratio)} of oracle">
-          <strong>${esc(city.city_id.replace("test_", ""))}</strong><span>${ratio.toFixed(0)}%</span><small>${city.actions.length} sites</small>
+        const placement = city.k_placement?.[String(currentK())] || city.placement;
+        const ratio = Math.max(0, Math.min(100, Number(placement.utility_ratio) * 100));
+        return `<button class="city-tile" data-city="${esc(city.city_id)}" title="${esc(city.city_id)} · ${pct(placement.utility_ratio)} din oracol">
+          <strong>${esc(city.city_id.replace("test_", ""))}</strong><span>${ratio.toFixed(0)}%</span><small>${currentK()} situri</small>
           <div class="tile-bar"><i style="width:${ratio.toFixed(1)}%"></i></div>
         </button>`;
       })
@@ -1214,20 +1290,20 @@
   function showTooltip(clientX, clientY, nodeId) {
     const city = currentCity();
     if (!city) return;
-    const action = city.actions.find((item) => Number(item.node_id) === Number(nodeId));
+    const action = cityActions(city).find((item) => Number(item.node_id) === Number(nodeId));
     const node = city.nodes[nodeId];
     if (!node) return;
     const label = action
-      ? `Rank ${action.rank} | ${esc(action.action_id)}`
+      ? `Rang ${action.rank} | ${esc(action.action_id)}`
       : Number(node[2]) === 1
-        ? "Existing charging station"
-        : "Candidate node";
+        ? "Stație de încărcare existentă"
+        : "Nod candidat";
     const driver = action?.drivers?.[0];
     const driverLine = driver
-      ? `<span class="tip-driver">Top driver: ${esc(featureLabel(driver.feature))} = ${featureValue(driver.feature, driver.value)} (city median ${featureValue(driver.feature, driver.median)})</span>`
+      ? `<span class="tip-driver">Factor principal: ${esc(featureLabel(driver.feature))} = ${featureValue(driver.feature, driver.value)} (mediana orașului ${featureValue(driver.feature, driver.median)})</span>`
       : "";
-    const hint = action ? `<span class="tip-hint">Click to inspect | double-click for the decision trace</span>` : "";
-    els.mapTooltip.innerHTML = `<strong>Node ${nodeId}</strong>${label}<br>${action ? `${fmt(action.predicted_uplift, 1)} uplift | ${action.confidence} confidence` : `demand ${fmt(node[3], 1)}`}${driverLine}${hint}`;
+    const hint = action ? `<span class="tip-hint">Click pentru detalii | dublu-click pentru trasabilitatea deciziei</span>` : "";
+    els.mapTooltip.innerHTML = `<strong>Nod ${nodeId}</strong>${label}<br>${action ? `${fmt(action.predicted_uplift, 1)} creștere | încredere ${esc(confidenceLabel(action.confidence))}` : `cerere ${fmt(node[3], 1)}`}${driverLine}${hint}`;
     const rect = canvas.getBoundingClientRect();
     const wrapRect = canvas.parentElement.getBoundingClientRect();
     els.mapTooltip.hidden = false;
@@ -1340,7 +1416,7 @@
       return;
     }
     fitMap();
-    toast("Map fitted to the city");
+    toast("Harta a fost încadrată pe oraș");
   }
 
   function populateCities() {
@@ -1353,6 +1429,7 @@
     const beforeCity = state.cityId;
     const beforeView = state.view;
     readHash();
+    state.k = currentK();
     if (!state.cityId) state.cityId = state.data.demo_city;
     if (!state.data.cities.some((city) => city.city_id === state.cityId)) state.cityId = state.data.demo_city;
     if (state.selectedNode === null) {
@@ -1371,10 +1448,11 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       state.data = await response.json();
     } catch (error) {
-      document.body.innerHTML = `<main style="max-width:640px;margin:10vh auto;font-family:Inter,sans-serif;padding:24px;border:2px solid #0b2340;border-radius:20px;box-shadow:0 4px 0 #d5e3f2"><h1 style="font-family:Fredoka,sans-serif">Could not load the demo</h1><p>Start the local server from <code>frontend/</code>: <code>python server.py</code>, then open the printed URL.</p><p style="color:#5e768e">${esc(error.message)}</p></main>`;
+      document.body.innerHTML = `<main style="max-width:640px;margin:10vh auto;font-family:Inter,sans-serif;padding:24px;border:2px solid #0b2340;border-radius:20px;box-shadow:0 4px 0 #d5e3f2"><h1 style="font-family:Fredoka,sans-serif">Demonstrația nu a putut fi încărcată</h1><p>Pornește serverul local din <code>frontend/</code>: <code>python server.py</code>, apoi deschide URL-ul afișat.</p><p style="color:#5e768e">${esc(error.message)}</p></main>`;
       return;
     }
     readHash();
+    state.k = currentK();
     if (!state.cityId) state.cityId = state.data.demo_city;
     canvas = $("#mapCanvas");
     ctx = canvas.getContext("2d");

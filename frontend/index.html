@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ro">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PPC EV Siting Lab</title>
-  <meta name="description" content="White-canvas decision support UI for the synthetic EV charging placement benchmark." />
+  <title>PPC EV Siting Lab — amplasarea stațiilor de încărcare</title>
+  <meta name="description" content="Interfață de decizie pe fundal alb pentru benchmark-ul sintetic de amplasare a stațiilor de încărcare pentru vehicule electrice." />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -31,65 +31,74 @@
 
   <div class="app">
     <header class="topbar">
-      <a class="brand" href="#view=map" data-view="map" aria-label="EV Siting Lab home">
+      <a class="brand" href="#view=map" data-view="map" aria-label="Pagina principală PPC EV Siting Lab">
         <span class="brand-mark"><svg class="icon"><use href="#i-bolt"></use></svg></span>
         <span class="brand-copy">
           <span class="brand-kicker"><span class="ppc-chip">PPC</span> EV SITING LAB</span>
-          <strong>Charging Site Intelligence</strong>
+          <strong>Inteligență pentru amplasarea stațiilor</strong>
         </span>
       </a>
-      <nav class="tabs" aria-label="Views">
-        <button class="tab is-active" data-view="map"><svg class="icon"><use href="#i-map"></use></svg><span>Site map</span></button>
-        <button class="tab" data-view="leaderboard"><svg class="icon"><use href="#i-chart"></use></svg><span>Rankings</span></button>
-        <button class="tab" data-view="csv"><svg class="icon"><use href="#i-table"></use></svg><span>CSV data</span></button>
+      <nav class="tabs" aria-label="Secțiuni">
+        <button class="tab is-active" data-view="map"><svg class="icon"><use href="#i-map"></use></svg><span>Harta siturilor</span></button>
+        <button class="tab" data-view="leaderboard"><svg class="icon"><use href="#i-chart"></use></svg><span>Clasament</span></button>
+        <button class="tab" data-view="csv"><svg class="icon"><use href="#i-table"></use></svg><span>Date CSV</span></button>
         <button class="tab" data-view="model"><svg class="icon"><use href="#i-chart"></use></svg><span>Model</span></button>
       </nav>
-      <div class="top-note">Synthetic benchmark · K=8</div>
+      <div class="top-note">Benchmark K=8 · K live 1–12</div>
     </header>
 
     <div class="shell">
       <aside class="rail left-rail">
         <section class="card pad city-card">
-          <div class="eyebrow">Test city</div>
+          <div class="eyebrow">Oraș de test</div>
           <div class="city-picker">
-            <button class="icon-btn" id="prevCity" aria-label="Previous city"><svg class="icon"><use href="#i-arrow-left"></use></svg></button>
-            <select id="citySelect" aria-label="Select a synthetic test city"></select>
-            <button class="icon-btn" id="nextCity" aria-label="Next city"><svg class="icon"><use href="#i-arrow-right"></use></svg></button>
+            <button class="icon-btn" id="prevCity" aria-label="Orașul anterior"><svg class="icon"><use href="#i-arrow-left"></use></svg></button>
+            <select id="citySelect" aria-label="Selectează un oraș sintetic de test"></select>
+            <button class="icon-btn" id="nextCity" aria-label="Orașul următor"><svg class="icon"><use href="#i-arrow-right"></use></svg></button>
           </div>
           <div class="city-sub" id="citySub">—</div>
           <div class="mini-stats" id="cityMiniStats"></div>
+          <div class="k-control">
+            <div class="k-control-head"><label for="kInput">Buget K</label><span id="kHint">K=8 benchmark</span></div>
+            <div class="k-stepper">
+              <button type="button" id="kMinus" aria-label="Scade K">−</button>
+              <input id="kInput" type="number" min="1" max="12" step="1" value="8" aria-label="Buget K" />
+              <button type="button" id="kPlus" aria-label="Crește K">+</button>
+            </div>
+            <small id="kNote">1–8 taie din clasamentul K=8; 9–12 este o extensie demo.</small>
+          </div>
         </section>
 
         <section class="card pad">
-          <div class="eyebrow">Filters</div>
-          <div class="chip-row" id="confidenceFilters" role="group" aria-label="Confidence filter">
-            <button class="chip is-active" data-confidence="all" aria-pressed="true"><span>All</span><b>0</b></button>
-            <button class="chip" data-confidence="high" aria-pressed="false"><span>High</span><b>0</b></button>
-            <button class="chip" data-confidence="medium" aria-pressed="false"><span>Medium</span><b>0</b></button>
-            <button class="chip" data-confidence="low" aria-pressed="false"><span>Low</span><b>0</b></button>
+          <div class="eyebrow">Filtre</div>
+          <div class="chip-row" id="confidenceFilters" role="group" aria-label="Filtru după nivelul de încredere">
+            <button class="chip is-active" data-confidence="all" aria-pressed="true"><span>Toate</span><b>0</b></button>
+            <button class="chip" data-confidence="high" aria-pressed="false"><span>Ridicată</span><b>0</b></button>
+            <button class="chip" data-confidence="medium" aria-pressed="false"><span>Medie</span><b>0</b></button>
+            <button class="chip" data-confidence="low" aria-pressed="false"><span>Scăzută</span><b>0</b></button>
           </div>
-          <div class="filter-hint" id="filterHint">Filters apply to the map and the recommended-sites list.</div>
+          <div class="filter-hint" id="filterHint">Filtrele se aplică hărții și listei de situri recomandate.</div>
           <label class="switch-row">
             <input type="checkbox" id="reviewOnly" />
             <span class="switch"></span>
-            <span>Review queue only</span>
+            <span>Doar cele de verificat</span>
           </label>
           <div class="search-box">
             <svg class="icon"><use href="#i-search"></use></svg>
-            <input id="searchInput" type="search" placeholder="Search node, action, rank…" autocomplete="off" />
+            <input id="searchInput" type="search" placeholder="Caută nod, acțiune, rang…" autocomplete="off" />
           </div>
         </section>
 
         <section class="card pad">
-          <div class="eyebrow">Layers</div>
-          <label class="switch-row"><input type="checkbox" id="layerLinks" checked /><span class="switch"></span><span>Graph links</span></label>
-          <label class="switch-row"><input type="checkbox" id="layerDemand" /><span class="switch"></span><span>Simulator demand</span></label>
-          <label class="switch-row"><input type="checkbox" id="layerStations" checked /><span class="switch"></span><span>Existing stations</span></label>
+          <div class="eyebrow">Straturi</div>
+          <label class="switch-row"><input type="checkbox" id="layerLinks" checked /><span class="switch"></span><span>Legături în graf</span></label>
+          <label class="switch-row"><input type="checkbox" id="layerDemand" /><span class="switch"></span><span>Cerere simulator</span></label>
+          <label class="switch-row"><input type="checkbox" id="layerStations" checked /><span class="switch"></span><span>Stații existente</span></label>
           <div class="legend">
-            <div><span class="dot dot-node"></span>Urban node</div>
-            <div><span class="dot dot-station"></span>Existing station</div>
-            <div><span class="dot dot-site"></span>Recommended site</div>
-            <div><span class="dot dot-review"></span>Needs review</div>
+            <div><span class="dot dot-node"></span>Nod urban</div>
+            <div><span class="dot dot-station"></span>Stație existentă</div>
+            <div><span class="dot dot-site"></span>Sit recomandat</div>
+            <div><span class="dot dot-review"></span>Necesită verificare</div>
           </div>
         </section>
 
@@ -97,74 +106,74 @@
       </aside>
 
       <main class="main">
-        <section class="view is-active" id="view-map" aria-label="Site map">
+        <section class="view is-active" id="view-map" aria-label="Harta siturilor">
           <div class="card map-card">
             <div class="map-head">
               <div>
-                <div class="eyebrow">Synthetic site canvas · no basemap</div>
-                <h2 id="mapTitle">Loading city…</h2>
+                <div class="eyebrow">Hartă sintetică · fără hartă geografică</div>
+                <h2 id="mapTitle">Se încarcă orașul…</h2>
               </div>
               <div class="map-head-right">
                 <div class="map-kpis" id="mapKpis"></div>
                 <div class="map-controls">
-                  <button class="icon-btn" id="zoomOut" aria-label="Zoom out"><svg class="icon"><use href="#i-minus"></use></svg></button>
-                  <button class="icon-btn" id="zoomIn" aria-label="Zoom in"><svg class="icon"><use href="#i-plus"></use></svg></button>
-                  <button class="icon-btn" id="fitMap" aria-label="Fit map"><svg class="icon"><use href="#i-fit"></use></svg></button>
+                  <button class="icon-btn" id="zoomOut" aria-label="Micșorează"><svg class="icon"><use href="#i-minus"></use></svg></button>
+                  <button class="icon-btn" id="zoomIn" aria-label="Mărește"><svg class="icon"><use href="#i-plus"></use></svg></button>
+                  <button class="icon-btn" id="fitMap" aria-label="Încadrează harta"><svg class="icon"><use href="#i-fit"></use></svg></button>
                 </div>
               </div>
             </div>
             <div class="map-wrap">
-              <canvas id="mapCanvas" tabindex="0" aria-label="Synthetic city node map with recommended charging sites"></canvas>
-              <div class="map-note">White canvas by design. Dots are synthetic graph nodes, not streets. Halo size = predicted uplift. Scroll to zoom, drag to pan, click to inspect, double-click a recommended site for the full explanation.</div>
+              <canvas id="mapCanvas" tabindex="0" aria-label="Hartă sintetică de noduri urbane cu situri de încărcare recomandate"></canvas>
+              <div class="map-note">Fundal alb intenționat. Punctele sunt noduri sintetice, nu străzi. Mărimea haloului = creșterea estimată. Derulează pentru zoom, trage pentru deplasare, click pentru detalii, dublu-click pe un sit recomandat pentru explicația completă.</div>
               <div class="map-tooltip" id="mapTooltip" hidden></div>
             </div>
           </div>
           <div class="bottom-grid">
             <section class="card pad">
-              <div class="section-head"><div><div class="eyebrow">Global</div><h2>Top recommendations</h2></div><svg class="icon big-icon"><use href="#i-chart"></use></svg></div>
+              <div class="section-head"><div><div class="eyebrow">Global</div><h2>Recomandări principale</h2></div><svg class="icon big-icon"><use href="#i-chart"></use></svg></div>
               <div class="top-list" id="topRecommendations"></div>
             </section>
             <section class="card pad">
-              <div class="section-head"><div><div class="eyebrow">This city</div><h2>City scorecard</h2></div><svg class="icon big-icon"><use href="#i-chart"></use></svg></div>
+              <div class="section-head"><div><div class="eyebrow">Acest oraș</div><h2>Fișa orașului</h2></div><svg class="icon big-icon"><use href="#i-chart"></use></svg></div>
               <div class="scorecard-grid" id="cityScorecard"></div>
             </section>
           </div>
         </section>
 
-        <section class="view" id="view-leaderboard" aria-label="Rankings">
+        <section class="view" id="view-leaderboard" aria-label="Clasament">
           <div class="card view-card">
             <div class="view-head">
-              <div><div class="eyebrow">All 40 test cities</div><h2>Recommended site rankings</h2><p>Ranked by predicted incremental sessions/day. Select any row to inspect it on the map.</p></div>
+              <div><div class="eyebrow">Toate cele 40 de orașe de test</div><h2>Clasamentul siturilor recomandate</h2><p>Ordonate după creșterea incrementală estimată, în sesiuni pe zi. Selectează un rând pentru a inspecta situl pe hartă.</p></div>
               <div class="view-controls">
-                <div class="search-box compact"><svg class="icon"><use href="#i-search"></use></svg><input id="lbSearch" type="search" placeholder="Filter city or node…" /></div>
+                <div class="search-box compact"><svg class="icon"><use href="#i-search"></use></svg><input id="lbSearch" type="search" placeholder="Filtrează orașul sau nodul…" /></div>
                 <select id="lbConfidence" class="select compact">
-                  <option value="all">All confidence</option>
-                  <option value="high">High only</option>
-                  <option value="medium">Medium only</option>
-                  <option value="low">Low only</option>
+                  <option value="all">Toate nivelurile</option>
+                  <option value="high">Doar ridicată</option>
+                  <option value="medium">Doar medie</option>
+                  <option value="low">Doar scăzută</option>
                 </select>
-                <label class="switch-row compact"><input type="checkbox" id="lbReview" /><span class="switch"></span><span>Review only</span></label>
+                <label class="switch-row compact"><input type="checkbox" id="lbReview" /><span class="switch"></span><span>Doar cele de verificat</span></label>
               </div>
             </div>
             <div class="table-wrap">
               <table class="data-table" id="leaderboardTable">
-                <thead><tr><th>#</th><th>Site</th><th>City</th><th>Node</th><th>Uplift</th><th>Usage</th><th>Confidence</th><th>Review</th></tr></thead>
+                <thead><tr><th>#</th><th>Sit</th><th>Oraș</th><th>Nod</th><th>Creștere</th><th>Utilizare</th><th>Încredere</th><th>Verificare</th></tr></thead>
                 <tbody id="leaderboardBody"></tbody>
               </table>
             </div>
           </div>
         </section>
 
-        <section class="view" id="view-csv" aria-label="CSV data">
+        <section class="view" id="view-csv" aria-label="Date CSV">
           <div class="card view-card">
             <div class="view-head">
-              <div><div class="eyebrow">Source artifact</div><h2>priority_sites.csv</h2><p>The exact agent output. Select a row to inspect the node, or download the original CSV.</p></div>
+              <div><div class="eyebrow">Artefact sursă</div><h2>priority_sites.csv</h2><p>Ieșirea exactă a agentului. Selectează un rând pentru a inspecta nodul sau descarcă CSV-ul original.</p></div>
               <div class="view-controls">
-                <div class="search-box compact"><svg class="icon"><use href="#i-search"></use></svg><input id="csvSearch" type="search" placeholder="Filter CSV rows…" /></div>
-                <a class="btn primary small" href="data/priority_sites.csv" download><svg class="icon"><use href="#i-download"></use></svg><span>Download CSV</span></a>
+                <div class="search-box compact"><svg class="icon"><use href="#i-search"></use></svg><input id="csvSearch" type="search" placeholder="Filtrează rândurile CSV…" /></div>
+                <a class="btn primary small" href="data/priority_sites.csv" download><svg class="icon"><use href="#i-download"></use></svg><span>Descarcă CSV</span></a>
               </div>
             </div>
-            <div class="table-hint"><svg class="icon"><use href="#i-arrow-right"></use></svg><span>16 actual CSV columns · scroll horizontally to see the full row</span></div>
+            <div class="table-hint"><svg class="icon"><use href="#i-arrow-right"></use></svg><span>16 coloane CSV reale · artefactul original este K=8; derulează orizontal pentru rândul complet</span></div>
             <div class="table-wrap tall">
               <table class="data-table csv-table" id="csvTable">
                 <thead><tr id="csvHeadRow"></tr></thead>
@@ -174,40 +183,40 @@
           </div>
         </section>
 
-        <section class="view" id="view-model" aria-label="Model results">
+        <section class="view" id="view-model" aria-label="Rezultatele modelului">
           <div class="model-grid">
             <section class="card pad model-hero">
-              <div class="eyebrow">Synthetic benchmark · 40 unseen cities</div>
-              <h2>The model captures <span class="highlight">85.5%</span> of the oracle.</h2>
-              <p>K=8 chargers per city. The oracle is a greedy search on the simulator's ground truth; the model is a 3-seed MLP ensemble trained on 300 other cities.</p>
+              <div class="eyebrow">Benchmark sintetic · 40 de orașe nevăzute</div>
+              <h2>La K=8, modelul capturează <span class="highlight">85,5%</span> din oracol.</h2>
+              <p>K=8 este benchmark-ul original. Controlul K din panoul stâng recalculează lista, harta și captura pentru K=1–12; valori peste 8 sunt o extensie demo generată cu același model.</p>
               <div class="kpi-grid" id="modelKpis"></div>
             </section>
             <section class="card pad">
-              <div class="eyebrow">Placement vs baselines</div>
-              <h3>Share of oracle incremental utility</h3>
+              <div class="eyebrow">Amplasare vs referințe</div>
+              <h3>Pondere din utilitatea incrementală a oracolului</h3>
               <div class="bar-list" id="baselineBars"></div>
-              <div class="callout"><svg class="icon"><use href="#i-bolt"></use></svg><span>OOD test: <strong>88.4%</strong> of oracle. The model is not tuned on test cities.</span></div>
+              <div class="callout"><svg class="icon"><use href="#i-bolt"></use></svg><span>Test OOD: <strong>88,4%</strong> din oracol. Modelul nu este reglat pe orașele de test.</span></div>
             </section>
             <section class="card pad">
-              <div class="eyebrow">Feature importance</div>
-              <h3>What drives candidate uplift</h3>
+              <div class="eyebrow">Importanța caracteristicilor</div>
+              <h3>Ce influențează creșterea candidaților</h3>
               <div class="bar-list feature-bars" id="featureBars"></div>
             </section>
             <section class="card pad">
-              <div class="eyebrow">How a site is selected</div>
-              <h3>Three steps, one measurable objective</h3>
+              <div class="eyebrow">Cum este ales un sit</div>
+              <h3>Trei pași, un obiectiv măsurabil</h3>
               <div class="steps" id="modelSteps"></div>
             </section>
             <section class="card pad city-mosaic-card">
-              <div class="eyebrow">All test cities</div>
-              <h3>City scorecard mosaic</h3>
+              <div class="eyebrow">Toate orașele de test</div>
+              <h3>Mozaic cu fișele orașelor</h3>
               <div class="city-mosaic" id="cityMosaic"></div>
             </section>
             <section class="card pad scope-card">
-              <div class="eyebrow">Read this first</div>
-              <h3>What this is — and is not</h3>
-              <p>This is a <strong>synthetic decision benchmark</strong>, not a real Romanian demand forecast. The ground truth is generated by a Huff competition simulator. The UI shows model predictions on synthetic cities; absolute sessions/day should not be read as real Bucharest revenue.</p>
-              <div class="scope-pills"><span>400 cities</span><span>501,812 nodes</span><span>36,809 stations</span><span>K=8</span></div>
+              <div class="eyebrow">Citește mai întâi</div>
+              <h3>Ce este — și ce nu este</h3>
+              <p>Acesta este un <strong>benchmark sintetic de decizie</strong>, nu o prognoză reală de cerere pentru România. Adevărul de referință este generat de un simulator cu competiție Huff. Interfața arată predicțiile modelului pe orașe sintetice; valorile absolute în sesiuni pe zi nu trebuie citite ca venit real pentru București.</p>
+              <div class="scope-pills"><span>400 de orașe</span><span>501.812 noduri</span><span>36.809 stații</span><span>K=8</span></div>
             </section>
           </div>
         </section>
@@ -217,15 +226,15 @@
         <section class="card details-card">
           <div id="detailsEmpty" class="details-empty">
             <div class="empty-icon"><svg class="icon"><use href="#i-map"></use></svg></div>
-            <h2>Select a site</h2>
-            <p>Click an orange recommendation on the white canvas, or choose one from the list below.</p>
-            <p class="empty-filter" id="emptyFilterNote" hidden>No sites match the current filters.</p>
-            <div class="hint-row"><span class="key">←</span><span class="key">→</span><span>cycle recommendations</span></div>
+            <h2>Selectează un sit</h2>
+            <p>Dă click pe o recomandare portocalie de pe fundalul alb sau alege un sit din lista de mai jos.</p>
+            <p class="empty-filter" id="emptyFilterNote" hidden>Niciun sit nu corespunde filtrelor curente.</p>
+            <div class="hint-row"><span class="key">←</span><span class="key">→</span><span>parcurge recomandările</span></div>
           </div>
           <div id="detailsContent" hidden></div>
         </section>
         <section class="card pad city-actions-card">
-          <div class="section-head"><div><div class="eyebrow">This city</div><h3>Recommended sites</h3></div><span class="pill" id="cityActionCount">0</span></div>
+          <div class="section-head"><div><div class="eyebrow">Acest oraș</div><h3>Situri recomandate</h3></div><span class="pill" id="cityActionCount">0</span></div>
           <div id="cityActionList" class="city-action-list"></div>
         </section>
       </aside>
@@ -233,7 +242,7 @@
 
     <footer class="footer">
       <span><strong>PPC EV Siting Lab</strong> · Smarthack 2026</span>
-      <span>Synthetic EV placement benchmark · no geographic basemap</span>
+      <span>Benchmark sintetic de amplasare EV · fără hartă geografică</span>
     </footer>
   </div>
 
@@ -241,10 +250,10 @@
     <div class="why-modal card" role="dialog" aria-modal="true" aria-labelledby="whyTitle">
       <div class="why-modal-head">
         <div>
-          <div class="eyebrow">Decision trace</div>
-          <h2 id="whyTitle">Why this node?</h2>
+          <div class="eyebrow">Trasabilitatea deciziei</div>
+          <h2 id="whyTitle">De ce acest nod?</h2>
         </div>
-        <button class="btn ghost small" id="closeWhyBtn" type="button">Close</button>
+        <button class="btn ghost small" id="closeWhyBtn" type="button">Închide</button>
       </div>
       <div class="why-modal-body" id="whyContent"></div>
     </div>
@@ -255,5 +264,3 @@
   <script src="app.js" defer></script>
 </body>
 </html>
-
-

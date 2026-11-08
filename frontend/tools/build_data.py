@@ -20,13 +20,21 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_GEN_SRC = ROOT / "data-generation" / "src"
-if str(DATA_GEN_SRC) not in sys.path:
-    sys.path.insert(0, str(DATA_GEN_SRC))
+ML_AGENT_SRC = ROOT / "ML-Agent" / "src"
+for source in (DATA_GEN_SRC, ML_AGENT_SRC):
+    if str(source) not in sys.path:
+        sys.path.insert(0, str(source))
+
+from evplacement.synthetic.agent import select_actions
+from evplacement.synthetic.model import evaluate_placement
 
 CITIES_PATH = ROOT / "data-generation" / "data" / "synthetic" / "cities.joblib"
 BENCHMARK_PATH = ROOT / "data-generation" / "data" / "synthetic" / "benchmark.json"
 OUTPUT_DIR = ROOT / "ML-Agent" / "outputs" / "synthetic"
 FRONTEND_DATA = ROOT / "frontend" / "data"
+
+BENCHMARK_K = 8
+MAX_K = 12
 
 ACTIONS_PATH = OUTPUT_DIR / "priority_sites.csv"
 PLACEMENT_PATH = OUTPUT_DIR / "placement_results.csv"
@@ -130,6 +138,19 @@ def build() -> dict:
     benchmark = json.loads(BENCHMARK_PATH.read_text(encoding="utf-8"))
     importance = pd.read_csv(IMPORTANCE_PATH)
     agent_state = json.loads(AGENT_STATE_PATH.read_text(encoding="utf-8"))
+    experiment = joblib.load(OUTPUT_DIR / "experiment.joblib")
+
+    # Precompute a longer decision order once. The greedy selection is
+    # prefix-consistent: ranks 1..8 are the original K=8 artifact; ranks 9..12
+    # are a live extension used only by the K control.
+    generated_actions = select_actions(
+        experiment["uplift_model"],
+        test_cities,
+        MAX_K,
+        experiment["alpha"],
+        importance=importance,
+        usage_model=experiment["usage_model"],
+    )
 
     placement_fields = [
         "n_nodes",
@@ -149,8 +170,21 @@ def build() -> dict:
         "random_ratio",
     ]
 
+    k_metrics = {}
+    k_city_placements = {}
+    for k in range(1, MAX_K + 1):
+        result = evaluate_placement(experiment["uplift_model"], test_cities, experiment["alpha"], k=k)
+        k_metrics[str(k)] = result["summary"]
+        for _, row in result["cities"].iterrows():
+            k_city_placements.setdefault(str(row["city_id"]), {})[str(k)] = {
+                key: (_num(row[key]) if key not in {"n_nodes", "n_existing"} else _int(row[key]))
+                for key in placement_fields
+                if key in row
+            }
+
     city_payloads = []
     flat_actions = []
+    all_actions = []
     for city in test_cities:
         nodes = city.nodes
         node_arrays = []
@@ -182,9 +216,24 @@ def build() -> dict:
         }
 
         city_actions = []
-        for _, row in actions[actions["city_id"] == city.city_id].sort_values("rank").iterrows():
+        original_by_rank = {
+            int(row["rank"]): row
+            for _, row in actions[actions["city_id"] == city.city_id].iterrows()
+        }
+        generated_by_rank = {
+            int(row["rank"]): row
+            for _, row in generated_actions[generated_actions["city_id"] == city.city_id].iterrows()
+        }
+        for rank in range(1, MAX_K + 1):
+            if rank in original_by_rank:
+                row = original_by_rank[rank]
+                raw = raw_rows.get(str(row["action_id"]), {})
+                source = "priority_sites"
+            else:
+                row = generated_by_rank[rank]
+                raw = {}
+                source = "demo_extension"
             action_id = str(row["action_id"])
-            raw = raw_rows.get(action_id, {})
             explanation = _parse_explanation(row.get("explanation"))
             node_id = int(row["node_id"])
             if node_id in feature_rows.index:
@@ -210,7 +259,7 @@ def build() -> dict:
                 "action": str(row["action"]),
                 "city_id": str(row["city_id"]),
                 "node_id": node_id,
-                "rank": int(row["rank"]),
+                "rank": rank,
                 "predicted_uplift": _num(row["predicted_uplift"], 2),
                 "predicted_usage": _num(row["predicted_usage"], 2),
                 "uncertainty": _num(row["uncertainty"], 2),
@@ -222,10 +271,13 @@ def build() -> dict:
                 "drivers": drivers,
                 "context": context,
                 "status": str(row.get("status", "PROPOSED")),
-                "csv_row": _csv_line(raw, csv_header),
+                "source": source,
+                "csv_row": _csv_line(raw, csv_header) if raw else "",
             }
             city_actions.append(action)
-            flat_actions.append(action)
+            all_actions.append(action)
+            if rank <= BENCHMARK_K:
+                flat_actions.append(action)
 
         city_payloads.append(
             {
@@ -243,19 +295,32 @@ def build() -> dict:
                     "lambda_norm": round(float(city.params["lambda_norm"]), 5),
                 },
                 "placement": placement_payload,
+                "k_placement": k_city_placements[str(city.city_id)],
                 "nodes": node_arrays,
                 "edges": edges,
                 "medians": {feature: city_medians[feature] for feature in CONTEXT_FEATURES},
-                "actions": city_actions,
+                "actions": [action for action in city_actions if action["rank"] <= BENCHMARK_K],
+                "k_actions": city_actions,
             }
         )
 
     flat_actions.sort(key=lambda action: action["predicted_uplift"], reverse=True)
+    all_actions.sort(key=lambda action: action["predicted_uplift"], reverse=True)
+    k_review_counts = {
+        str(k): sum(1 for action in all_actions if action["rank"] <= k and action["requires_human_review"])
+        for k in range(1, MAX_K + 1)
+    }
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "city_count": len(city_payloads),
         "action_count": len(flat_actions),
+        "all_action_count": len(all_actions),
         "review_count": sum(1 for action in flat_actions if action["requires_human_review"]),
+        "k_review_counts": k_review_counts,
+        "benchmark_k": BENCHMARK_K,
+        "k_min": 1,
+        "k_max": MAX_K,
+        "k_metrics": k_metrics,
         "benchmark": benchmark,
         "metrics": metrics,
         "feature_importance": importance.round(6).to_dict(orient="records"),
@@ -263,6 +328,7 @@ def build() -> dict:
         "csv_header": csv_header,
         "cities": city_payloads,
         "actions": flat_actions,
+        "all_actions": all_actions,
         "demo_city": city_payloads[0]["city_id"] if city_payloads else None,
     }
     (FRONTEND_DATA / "dashboard.json").write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
