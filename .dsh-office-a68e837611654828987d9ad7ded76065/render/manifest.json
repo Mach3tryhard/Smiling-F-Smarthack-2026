@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "backend": "native",
+  "rasterEngine": "libreoffice",
+  "source": "saved",
+  "inputPath": "C:\\Users\\matei\\Desktop\\Smiling-F-Smarthack-2026\\docs\\PPC_EV_Siting_Lab_5min.pptx",
+  "sourceSha256": "fa18ef1151ecb8b0c73561bb949010ad39c60301cd63ec263ed5eae76da1f340",
+  "dpi": 144,
+  "pageCount": 8,
+  "images": [
+    {
+      "index": 1,
+      "page": 1,
+      "path": "C:\\Users\\matei\\Desktop\\Smiling-F-Smarthack-2026\\.dsh-office-a68e837611654828987d9ad7ded76065\\render\\page-0001.png",
+      "width": 1920,
+      "height": 1081,
+      "rectangle": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 720.0666666666667
+      },
+      "byteLength": 355154
+    }
+  ],
+  "missingFonts": []
+}

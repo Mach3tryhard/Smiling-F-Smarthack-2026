@@ -300,13 +300,6 @@ p { margin: 0; }
 }
 #mapCanvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; background: #fff; cursor: crosshair; outline: none; }
 #mapCanvas:focus-visible { box-shadow: inset 0 0 0 3px rgba(0, 87, 184, .25); }
-.map-note {
-  position: absolute; left: 10px; bottom: 9px;
-  background: rgba(255,255,255,.94);
-  border: 1px solid var(--line-strong); border-radius: 8px;
-  padding: 4px 7px; font-size: 8.5px; color: var(--muted);
-  pointer-events: none; max-width: 72%;
-}
 .map-tooltip {
   position: absolute; z-index: 5; pointer-events: none;
   background: var(--ink); color: #fff;
