@@ -35,6 +35,46 @@ METRICS_PATH = OUTPUT_DIR / "metrics.json"
 IMPORTANCE_PATH = OUTPUT_DIR / "feature_importance.csv"
 AGENT_STATE_PATH = OUTPUT_DIR / "agent_state.json"
 
+FEATURE_COLUMNS = [
+    "population",
+    "activity",
+    "income",
+    "ev_adoption",
+    "centrality",
+    "road_capacity",
+    "transit_access",
+    "highway_access",
+    "parking",
+    "poi_density",
+    "dist_center",
+    "degree",
+    "closeness",
+    "zone_business",
+    "zone_residential",
+    "zone_industrial",
+    "competing_capacity",
+    "n_stations_1km",
+    "nearest_station_dist",
+    "local_population",
+    "local_activity",
+    "planned_capacity",
+    "city_nodes",
+    "city_station_rate",
+]
+
+CONTEXT_FEATURES = [
+    "population",
+    "activity",
+    "ev_adoption",
+    "competing_capacity",
+    "nearest_station_dist",
+    "n_stations_1km",
+    "dist_center",
+    "transit_access",
+    "poi_density",
+    "planned_capacity",
+]
+
 
 def _num(value, digits=4):
     if value is None:
@@ -127,6 +167,12 @@ def build() -> dict:
                 ]
             )
         edges = [[int(a), int(b)] for a, b in city.edges]
+        feature_frame = city.features.reset_index(drop=True)
+        if "node_id" in feature_frame.columns:
+            feature_rows = feature_frame.set_index("node_id")
+        else:
+            feature_rows = feature_frame
+        city_medians = {feature: round(float(feature_frame[feature].median()), 4) for feature in FEATURE_COLUMNS}
 
         placement_row = placement.loc[city.city_id]
         placement_payload = {
@@ -140,11 +186,30 @@ def build() -> dict:
             action_id = str(row["action_id"])
             raw = raw_rows.get(action_id, {})
             explanation = _parse_explanation(row.get("explanation"))
+            node_id = int(row["node_id"])
+            if node_id in feature_rows.index:
+                feature_row = feature_rows.loc[node_id]
+            else:
+                feature_row = feature_frame.iloc[node_id]
+            drivers = []
+            for item in explanation:
+                feature = item.get("feature")
+                if feature not in FEATURE_COLUMNS:
+                    continue
+                drivers.append(
+                    {
+                        "feature": feature,
+                        "value": round(float(feature_row[feature]), 4),
+                        "median": city_medians[feature],
+                        "drop": round(float(item.get("drop_sessions_per_day", 0.0)), 2),
+                    }
+                )
+            context = {feature: round(float(feature_row[feature]), 4) for feature in CONTEXT_FEATURES}
             action = {
                 "action_id": action_id,
                 "action": str(row["action"]),
                 "city_id": str(row["city_id"]),
-                "node_id": int(row["node_id"]),
+                "node_id": node_id,
                 "rank": int(row["rank"]),
                 "predicted_uplift": _num(row["predicted_uplift"], 2),
                 "predicted_usage": _num(row["predicted_usage"], 2),
@@ -154,6 +219,8 @@ def build() -> dict:
                 "requires_human_review": str(row["requires_human_review"]).lower() == "true",
                 "review_reason": "" if pd.isna(row.get("review_reason")) else str(row["review_reason"]),
                 "explanation": explanation,
+                "drivers": drivers,
+                "context": context,
                 "status": str(row.get("status", "PROPOSED")),
                 "csv_row": _csv_line(raw, csv_header),
             }
@@ -178,6 +245,7 @@ def build() -> dict:
                 "placement": placement_payload,
                 "nodes": node_arrays,
                 "edges": edges,
+                "medians": {feature: city_medians[feature] for feature in CONTEXT_FEATURES},
                 "actions": city_actions,
             }
         )

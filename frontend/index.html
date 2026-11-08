@@ -63,11 +63,12 @@
         <section class="card pad">
           <div class="eyebrow">Filters</div>
           <div class="chip-row" id="confidenceFilters" role="group" aria-label="Confidence filter">
-            <button class="chip is-active" data-confidence="all">All</button>
-            <button class="chip" data-confidence="high">High</button>
-            <button class="chip" data-confidence="medium">Medium</button>
-            <button class="chip" data-confidence="low">Low</button>
+            <button class="chip is-active" data-confidence="all" aria-pressed="true"><span>All</span><b>0</b></button>
+            <button class="chip" data-confidence="high" aria-pressed="false"><span>High</span><b>0</b></button>
+            <button class="chip" data-confidence="medium" aria-pressed="false"><span>Medium</span><b>0</b></button>
+            <button class="chip" data-confidence="low" aria-pressed="false"><span>Low</span><b>0</b></button>
           </div>
+          <div class="filter-hint" id="filterHint">Filters apply to the map and the recommended-sites list.</div>
           <label class="switch-row">
             <input type="checkbox" id="reviewOnly" />
             <span class="switch"></span>
@@ -114,7 +115,7 @@
             </div>
             <div class="map-wrap">
               <canvas id="mapCanvas" tabindex="0" aria-label="Synthetic city node map with recommended charging sites"></canvas>
-              <div class="map-note">White canvas by design — dots are synthetic graph nodes, not streets. Scroll to zoom, drag to pan, click a node.</div>
+              <div class="map-note">White canvas by design. Dots are synthetic graph nodes, not streets. Halo size = predicted uplift. Scroll to zoom, drag to pan, click to inspect, double-click a recommended site for the full explanation.</div>
               <div class="map-tooltip" id="mapTooltip" hidden></div>
             </div>
           </div>
@@ -218,6 +219,7 @@
             <div class="empty-icon"><svg class="icon"><use href="#i-map"></use></svg></div>
             <h2>Select a site</h2>
             <p>Click an orange recommendation on the white canvas, or choose one from the list below.</p>
+            <p class="empty-filter" id="emptyFilterNote" hidden>No sites match the current filters.</p>
             <div class="hint-row"><span class="key">←</span><span class="key">→</span><span>cycle recommendations</span></div>
           </div>
           <div id="detailsContent" hidden></div>
@@ -233,6 +235,19 @@
       <span><strong>PPC EV Siting Lab</strong> · Smarthack 2026</span>
       <span>Synthetic EV placement benchmark · no geographic basemap</span>
     </footer>
+  </div>
+
+  <div class="why-backdrop" id="whyModal" hidden>
+    <div class="why-modal card" role="dialog" aria-modal="true" aria-labelledby="whyTitle">
+      <div class="why-modal-head">
+        <div>
+          <div class="eyebrow">Decision trace</div>
+          <h2 id="whyTitle">Why this node?</h2>
+        </div>
+        <button class="btn ghost small" id="closeWhyBtn" type="button">Close</button>
+      </div>
+      <div class="why-modal-body" id="whyContent"></div>
+    </div>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

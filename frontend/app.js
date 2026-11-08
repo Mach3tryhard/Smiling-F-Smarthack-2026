@@ -8,6 +8,7 @@
     data: null,
     cityId: null,
     selectedNode: null,
+    whyActionId: null,
     view: "map",
     confidence: "all",
     reviewOnly: false,
@@ -17,6 +18,7 @@
     lbReview: false,
     csvSearch: "",
     layers: { links: true, demand: false, stations: true },
+    highlight: null,
     map: {
       scale: 1,
       tx: 0,
@@ -27,6 +29,9 @@
       dpr: 1,
       fitted: false,
       autoFit: true,
+      fitScale: 1,
+      minScale: 0.25,
+      maxScale: 60,
     },
   };
 
@@ -56,6 +61,69 @@
     return city.actions.find((action) => action.node_id === Number(state.selectedNode)) || null;
   };
 
+  const actionAt = (city, nodeId) =>
+    city?.actions.find((action) => Number(action.node_id) === Number(nodeId)) || null;
+
+  const matchesFilters = (action) =>
+    (state.confidence === "all" || action.confidence === state.confidence) &&
+    (!state.reviewOnly || action.requires_human_review);
+
+  function visibleCityActions() {
+    const city = currentCity();
+    if (!city) return [];
+    return city.actions.filter(matchesFilters);
+  }
+
+  function syncFilterControls() {
+    $$("#confidenceFilters .chip").forEach((chip) => {
+      const active = chip.dataset.confidence === state.confidence;
+      chip.classList.toggle("is-active", active);
+      chip.setAttribute("aria-pressed", String(active));
+    });
+    const review = $("#reviewOnly");
+    if (review) review.checked = state.reviewOnly;
+  }
+
+  function renderConfidenceChips() {
+    const city = currentCity();
+    if (!city) return;
+    const counts = { all: city.actions.length, high: 0, medium: 0, low: 0 };
+    city.actions.forEach((action) => {
+      counts[confidenceClass(action.confidence)] += 1;
+    });
+    const labels = { all: "All", high: "High", medium: "Medium", low: "Low" };
+    $$("#confidenceFilters .chip").forEach((chip) => {
+      const key = chip.dataset.confidence;
+      chip.innerHTML = `<span>${labels[key]}</span><b>${counts[key]}</b>`;
+      chip.classList.toggle("is-empty", key !== "all" && counts[key] === 0);
+      const active = key === state.confidence;
+      chip.classList.toggle("is-active", active);
+      chip.setAttribute("aria-pressed", String(active));
+    });
+    const hint = $("#filterHint");
+    if (hint) {
+      hint.textContent = `${counts.high} high · ${counts.medium} medium · ${counts.low} low in this city. Filters apply to the map and the list.`;
+    }
+  }
+
+  function ensureSelectionWithinFilters() {
+    const city = currentCity();
+    if (!city) return;
+    const selected = actionAt(city, state.selectedNode);
+    if (selected && matchesFilters(selected)) return;
+    const first = visibleCityActions()[0];
+    state.selectedNode = first ? Number(first.node_id) : null;
+  }
+
+  function applyFilterChange() {
+    syncFilterControls();
+    ensureSelectionWithinFilters();
+    renderCityMeta();
+    renderCityActions();
+    renderDetails();
+    drawMap();
+  }
+
   const actionById = (id) => state.data?.actions.find((action) => action.action_id === id) || null;
 
   const confidenceLabel = (value) => ({ high: "High", medium: "Medium", low: "Low" }[value] || value);
@@ -65,8 +133,57 @@
     const review = action.requires_human_review
       ? `<span class="badge review"><svg class="icon"><use href="#i-warning"></use></svg>Review</span>`
       : `<span class="badge install"><svg class="icon"><use href="#i-check"></use></svg>Install</span>`;
-    return `<span class="badge ${confidenceClass(action.confidence)}">${esc(confidenceLabel(action.confidence))} · ${fmt(action.confidence_score, 1)}</span>${review}`;
+    return `<span class="badge ${confidenceClass(action.confidence)}">${esc(confidenceLabel(action.confidence))} - ${fmt(action.confidence_score, 1)}</span>${review}`;
   };
+
+  const FEATURE_META = {
+    population: { label: "Population index", digits: 2 },
+    activity: { label: "Activity / POI index", digits: 2 },
+    income: { label: "Income proxy", digits: 2 },
+    ev_adoption: { label: "EV adoption proxy", digits: 2 },
+    centrality: { label: "Centrality", digits: 2 },
+    road_capacity: { label: "Road capacity", digits: 2 },
+    transit_access: { label: "Transit access", digits: 2 },
+    highway_access: { label: "Highway access", digits: 2 },
+    parking: { label: "Parking index", digits: 2 },
+    poi_density: { label: "POI density", digits: 2 },
+    dist_center: { label: "Distance to centre", digits: 2 },
+    degree: { label: "Graph degree", digits: 0 },
+    closeness: { label: "Closeness", digits: 3 },
+    zone_business: { label: "Business zone share", digits: 2 },
+    zone_residential: { label: "Residential zone share", digits: 2 },
+    zone_industrial: { label: "Industrial zone share", digits: 2 },
+    competing_capacity: { label: "Nearby station capacity", digits: 2 },
+    n_stations_1km: { label: "Stations within 1 km", digits: 0 },
+    nearest_station_dist: { label: "Nearest station distance", digits: 3 },
+    local_population: { label: "Local population index", digits: 2 },
+    local_activity: { label: "Local activity index", digits: 2 },
+    planned_capacity: { label: "Planned capacity", digits: 2 },
+    city_nodes: { label: "City nodes", digits: 0 },
+    city_station_rate: { label: "City station rate", digits: 3 },
+  };
+
+  const featureMeta = (feature) => FEATURE_META[feature] || { label: String(feature).replaceAll("_", " "), digits: 2 };
+  const featureLabel = (feature) => featureMeta(feature).label;
+  const featureValue = (feature, value) => fmt(value, featureMeta(feature).digits);
+
+  function selectionSummary(action) {
+    const city = currentCity();
+    const ordered = city ? [...city.actions].sort((a, b) => a.rank - b.rank) : [];
+    const index = ordered.findIndex((item) => item.action_id === action.action_id);
+    const next = index >= 0 ? ordered[index + 1] : null;
+    const average = ordered.length ? ordered.reduce((sum, item) => sum + Number(item.predicted_uplift || 0), 0) / ordered.length : 0;
+    return {
+      rank: action.rank,
+      total: ordered.length,
+      average,
+      next,
+      deltaAverage: Number(action.predicted_uplift || 0) - average,
+      deltaNext: next ? Number(action.predicted_uplift || 0) - Number(next.predicted_uplift || 0) : null,
+      isFirst: action.rank === 1,
+      isLast: action.rank === ordered.length,
+    };
+  }
 
   function parseCsvLine(line) {
     const out = [];
@@ -140,12 +257,18 @@
     const requestedNode = options.node !== undefined ? Number(options.node) : null;
     if (requestedNode !== null && city.actions.some((action) => action.node_id === requestedNode)) {
       state.selectedNode = requestedNode;
+      const action = actionAt(city, requestedNode);
+      if (action && !matchesFilters(action)) {
+        state.confidence = "all";
+        state.reviewOnly = false;
+      }
     } else if (previousCity !== city.city_id) {
       state.selectedNode = city.actions[0]?.node_id ?? null;
     }
     if (state.selectedNode !== null && !city.actions.some((action) => action.node_id === Number(state.selectedNode)) && city.nodes[Number(state.selectedNode)] === undefined) {
       state.selectedNode = city.actions[0]?.node_id ?? null;
     }
+    ensureSelectionWithinFilters();
     renderAll();
     window.requestAnimationFrame(() => {
       resizeCanvas();
@@ -155,6 +278,13 @@
   }
 
   function selectNode(nodeId, options = {}) {
+    const city = currentCity();
+    const action = actionAt(city, nodeId);
+    if (action && !matchesFilters(action)) {
+      state.confidence = "all";
+      state.reviewOnly = false;
+      syncFilterControls();
+    }
     state.selectedNode = Number(nodeId);
     if (options.switchView) setView("map", false);
     renderDetails();
@@ -198,6 +328,8 @@
     els.modelSteps = $("#modelSteps");
     els.cityMosaic = $("#cityMosaic");
     els.toast = $("#toast");
+    els.whyModal = $("#whyModal");
+    els.whyContent = $("#whyContent");
 
     $$("[data-view]").forEach((element) => {
       element.addEventListener("click", (event) => {
@@ -213,16 +345,13 @@
     $$("#confidenceFilters .chip").forEach((chip) => {
       chip.addEventListener("click", () => {
         state.confidence = chip.dataset.confidence;
-        $$("#confidenceFilters .chip").forEach((item) => item.classList.toggle("is-active", item === chip));
-        renderCityActions();
-        renderDetails();
+        applyFilterChange();
       });
     });
 
     $("#reviewOnly").addEventListener("change", (event) => {
       state.reviewOnly = event.target.checked;
-      renderCityActions();
-      renderDetails();
+      applyFilterChange();
     });
     $("#searchInput").addEventListener("input", (event) => {
       state.search = event.target.value.trim().toLowerCase();
@@ -250,7 +379,7 @@
     canvas.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointerleave", onPointerLeave);
     canvas.addEventListener("wheel", onWheel, { passive: false });
-    canvas.addEventListener("dblclick", () => fitMap());
+    canvas.addEventListener("dblclick", onCanvasDoubleClick);
 
     els.detailsContent.addEventListener("click", onDetailsClick);
     els.cityActionList.addEventListener("click", (event) => {
@@ -291,6 +420,10 @@
       renderCsv();
     });
 
+    $('#closeWhyBtn').addEventListener("click", closeWhyModal);
+    els.whyModal.addEventListener("click", (event) => {
+      if (event.target === els.whyModal) closeWhyModal();
+    });
     window.addEventListener("hashchange", applyHash);
     window.addEventListener("resize", () => {
       resizeCanvas();
@@ -312,6 +445,7 @@
 
   function renderAll() {
     renderCityMeta();
+    renderConfidenceChips();
     renderCityStats();
     renderCityScorecard();
     renderCityActions();
@@ -337,10 +471,12 @@
       <div class="mini-stat"><span>Regret</span><strong>${pct(city.placement.regret, 0)}</strong></div>
     `;
     els.mapTitle.textContent = city.city_id;
+    const visible = visibleCityActions().length;
+    const siteLabel = visible === actions.length ? `${actions.length} recommendations` : `${visible} of ${actions.length} sites shown`;
     els.mapKpis.innerHTML = `
       <span class="map-kpi"><span class="dot dot-node"></span>${fmt(city.n_nodes, 0)} nodes</span>
       <span class="map-kpi"><span class="dot dot-station"></span>${fmt(city.n_existing, 0)} existing</span>
-      <span class="map-kpi"><span class="dot dot-site"></span>${actions.length} recommendations</span>
+      <span class="map-kpi ${visible === actions.length ? "" : "is-filtered"}"><span class="dot dot-site"></span>${siteLabel}</span>
       <span class="map-kpi">${reviews} review</span>
     `;
   }
@@ -378,17 +514,11 @@
   }
 
   function activeCityActions() {
-    const city = currentCity();
-    if (!city) return [];
     const query = state.search;
-    return city.actions.filter((action) => {
-      if (state.confidence !== "all" && action.confidence !== state.confidence) return false;
-      if (state.reviewOnly && !action.requires_human_review) return false;
-      if (query) {
-        const text = `${action.action_id} ${action.node_id} ${action.rank} ${action.confidence} ${action.predicted_uplift} ${action.review_reason}`.toLowerCase();
-        if (!text.includes(query)) return false;
-      }
-      return true;
+    return visibleCityActions().filter((action) => {
+      if (!query) return true;
+      const text = `${action.action_id} ${action.node_id} ${action.rank} ${action.confidence} ${action.predicted_uplift} ${action.review_reason}`.toLowerCase();
+      return text.includes(query);
     });
   }
 
@@ -420,30 +550,147 @@
     els.topRecommendations.innerHTML = top
       .map((action, index) => `
         <button class="top-item" data-city="${esc(action.city_id)}" data-node="${action.node_id}">
-          <span class="top-rank">${index + 1}</span>
-          <span><strong>${esc(action.city_id)} · Node ${action.node_id}</strong><small>${esc(action.confidence)} confidence · rank ${action.rank}</small></span>
+          <span class="top-rank" title="Position ${index + 1} in this list">${index + 1}</span>
+          <span><strong>${esc(action.city_id)} · Node ${action.node_id}</strong><small>${esc(action.confidence)} confidence · site rank ${action.rank}</small></span>
           <span class="top-value">${fmt(action.predicted_uplift, 1)}<small>uplift</small></span>
         </button>`)
       .join("");
   }
 
-  function whyRows(action) {
-    const explanation = Array.isArray(action.explanation) ? action.explanation : [];
-    if (!explanation.length) return `<div class="muted" style="font-size:10px">No local explanation stored.</div>`;
-    const max = Math.max(...explanation.map((item) => Number(item.drop_sessions_per_day) || 0), 1);
-    return explanation
-      .slice(0, 4)
+  function driverRows(action, limit = 4) {
+    const drivers = Array.isArray(action.drivers) && action.drivers.length
+      ? action.drivers
+      : (Array.isArray(action.explanation) ? action.explanation.map((item) => ({
+          feature: item.feature,
+          value: null,
+          median: null,
+          drop: Number(item.drop_sessions_per_day) || 0,
+        })) : []);
+    if (!drivers.length) return `<div class="muted" style="font-size:10px">No local explanation stored.</div>`;
+    const max = Math.max(...drivers.map((item) => Math.abs(Number(item.drop) || 0)), 1);
+    return drivers
+      .slice(0, limit)
       .map((item) => {
-        const width = Math.max(4, (Number(item.drop_sessions_per_day) / max) * 100);
-        return `<div class="why-row"><span class="feat" title="${esc(item.feature)}">${esc(String(item.feature).replaceAll("_", " "))}</span><span class="bar"><i style="width:${width.toFixed(1)}%"></i></span><b>${fmt(item.drop_sessions_per_day, 1)}</b></div>`;
+        const drop = Number(item.drop) || 0;
+        const width = Math.max(4, (Math.abs(drop) / max) * 100);
+        const hasValues = item.value !== null && item.value !== undefined && item.median !== null && item.median !== undefined;
+        return `<div class="why-row">
+          <span class="feat"><strong>${esc(featureLabel(item.feature))}</strong><small>${hasValues ? `value ${featureValue(item.feature, item.value)} | city median ${featureValue(item.feature, item.median)}` : "local occlusion"}</small></span>
+          <span class="bar"><i style="width:${width.toFixed(1)}%"></i></span>
+          <b>${drop > 0 ? "-" : "+"}${fmt(Math.abs(drop), 1)}</b>
+        </div>`;
       })
       .join("");
+  }
+
+  function contextGrid(action) {
+    const city = currentCity();
+    const context = action.context || {};
+    const medians = city?.medians || {};
+    const keys = Object.keys(context);
+    if (!keys.length) return `<div class="muted" style="font-size:10px">No context values stored.</div>`;
+    return `<div class="context-grid">${keys
+      .map((feature) => `<div class="context-item"><span>${esc(featureLabel(feature))}</span><strong>${featureValue(feature, context[feature])}</strong><small>city median ${featureValue(feature, medians[feature])}</small></div>`)
+      .join("")}</div>`;
+  }
+
+  function selectionSentence(action) {
+    const summary = selectionSummary(action);
+    const position = summary.isFirst
+      ? "It was the first site selected."
+      : summary.isLast
+        ? "It was the last site selected within the budget."
+        : `It was selected after ${summary.rank - 1} higher-ranked site${summary.rank - 1 === 1 ? "" : "s"}.`;
+    const next = summary.next
+      ? `The next selected site (rank ${summary.next.rank}) has a predicted uplift of ${fmt(summary.next.predicted_uplift, 2)} sessions/day.`
+      : "No lower-ranked site was selected in this city.";
+    return `${position} Its predicted uplift is ${fmt(action.predicted_uplift, 2)} sessions/day. ${next}`;
+  }
+
+  function selectionBlock(action) {
+    const summary = selectionSummary(action);
+    const nextValue = summary.next ? fmt(summary.next.predicted_uplift, 2) : "-";
+    const nextDelta = summary.deltaNext === null ? "-" : `${summary.deltaNext >= 0 ? "+" : ""}${fmt(summary.deltaNext, 2)}`;
+    return `<div class="why-selection">
+      <div class="why-selection-head"><strong>Rank ${summary.rank} of ${summary.total}</strong><span>greedy K=${summary.total} selection</span></div>
+      <p>${esc(selectionSentence(action))}</p>
+      <div class="why-figures">
+        <div><span>This site</span><strong>${fmt(action.predicted_uplift, 2)}</strong><small>sessions/day</small></div>
+        <div><span>Selected average</span><strong>${fmt(summary.average, 2)}</strong><small>sessions/day</small></div>
+        <div><span>Vs average</span><strong>${summary.deltaAverage >= 0 ? "+" : ""}${fmt(summary.deltaAverage, 2)}</strong><small>sessions/day</small></div>
+        <div><span>Next selected</span><strong>${nextValue}</strong><small>${nextDelta} vs next</small></div>
+      </div>
+      <p class="why-note">The optimizer is greedy: it selects one site at a time, re-scores the remaining candidates after a penalty for proximity to already selected sites, and stops at K=${summary.total}. This is a constrained selection order, not a global optimum.</p>
+    </div>`;
+  }
+
+  function renderWhyModal() {
+    const action = actionById(state.whyActionId) || currentAction();
+    if (!action || !els.whyContent) return;
+    const summary = selectionSummary(action);
+    const review = action.requires_human_review
+      ? `<div class="review-alert"><svg class="icon"><use href="#i-warning"></use></svg><span>${esc(action.review_reason || "Flagged for human review.")}</span></div>`
+      : "";
+    els.whyContent.innerHTML = `
+      <div class="why-hero">
+        <span class="rank-badge"><small>Rank</small><strong>${action.rank}</strong></span>
+        <div>
+          <h3>${esc(action.city_id)} | Node ${action.node_id}</h3>
+          <p>${esc(action.action_id)} | ${esc(action.status)}</p>
+        </div>
+        <div class="badge-row">${badge(action)}</div>
+      </div>
+      ${selectionBlock(action)}
+      <section class="why-section">
+        <h4>Why the agent chose this node</h4>
+        <p class="why-note">Each feature is replaced with this city's median and the model is re-scored. A negative impact means the actual value raises predicted uplift relative to a typical node; this is a local sensitivity, not a causal effect.</p>
+        <div class="why-list">${driverRows(action, 5)}</div>
+      </section>
+      <section class="why-section">
+        <h4>Site context the model sees</h4>
+        ${contextGrid(action)}
+      </section>
+      <section class="why-section">
+        <h4>Confidence and review</h4>
+        <div class="meter-wrap">
+          <div class="meter-label"><span>Confidence score</span><span>${fmt(action.confidence_score, 1)} / 100</span></div>
+          <div class="meter"><i style="width:${Math.max(0, Math.min(100, action.confidence_score))}%"></i></div>
+        </div>
+        <p class="why-note">Confidence is derived from disagreement across the three MLP seeds. Ensemble spread: ${fmt(action.uncertainty, 2)} sessions/day.</p>
+        ${review}
+      </section>
+      <details class="why-csv">
+        <summary>Source CSV row</summary>
+        <div class="csv-block">${esc(action.csv_row)}</div>
+      </details>
+      <p class="why-footnote">This is a prediction from the synthetic simulator model. It explains a model decision; it is not a real-world demand guarantee.</p>
+    `;
+  }
+
+  function openWhyModal(action) {
+    if (!action) return;
+    state.whyActionId = action.action_id;
+    renderWhyModal();
+    els.whyModal.hidden = false;
+    $("#closeWhyBtn").focus();
+  }
+
+  function closeWhyModal() {
+    if (!els.whyModal) return;
+    els.whyModal.hidden = true;
+    state.whyActionId = null;
   }
 
   function renderDetails() {
     const city = currentCity();
     const action = currentAction();
     if (!city || state.selectedNode === null) {
+      const hidden = city ? city.actions.length - visibleCityActions().length : 0;
+      const note = $("#emptyFilterNote");
+      if (note) {
+        note.hidden = hidden <= 0;
+        note.textContent = hidden > 0 ? `No sites match the current filter — ${hidden} hidden.` : "";
+      }
       els.detailsEmpty.hidden = false;
       els.detailsContent.hidden = true;
       return;
@@ -478,9 +725,12 @@
             <div class="meter"><i style="width:${Math.max(0, Math.min(100, action.confidence_score))}%"></i></div>
           </div>
           ${review}
-          <div>
-            <div class="eyebrow">Why this site</div>
-            <div class="why-list">${whyRows(action)}</div>
+          <div class="why-detail">
+            <div class="why-detail-head"><div class="eyebrow">Why this node</div><span class="pill">Rank ${action.rank} of ${city.actions.length}</span></div>
+            <p class="why-detail-copy">${esc(selectionSentence(action))}</p>
+            <div class="why-list">${driverRows(action, 3)}</div>
+            <small class="why-detail-note">Impact = change in predicted uplift if the feature is reset to the city median.</small>
+            <button class="btn primary small" data-why-action="${esc(action.action_id)}"><svg class="icon"><use href="#i-search"></use></svg>Full explanation</button>
           </div>
           <div>
             <div class="eyebrow">Actual CSV row</div>
@@ -489,7 +739,9 @@
           <div class="details-actions">
             <button class="btn ghost small" data-copy-action="${esc(action.action_id)}"><svg class="icon"><use href="#i-copy"></use></svg>Copy row</button>
             <button class="btn ghost small" data-open-csv="${esc(action.action_id)}"><svg class="icon"><use href="#i-table"></use></svg>CSV view</button>
+            <button class="btn ghost small" data-rank-action="${esc(action.action_id)}"><svg class="icon"><use href="#i-chart"></use></svg>Rankings</button>
           </div>
+          <div class="details-hint">Double-click this site on the map for the full decision trace.</div>
         </div>
       `;
       return;
@@ -535,6 +787,12 @@
       if (action) copyText(action.csv_row, "CSV row copied.");
       return;
     }
+    const whyButton = event.target.closest("[data-why-action]");
+    if (whyButton) {
+      const action = actionById(whyButton.dataset.whyAction);
+      if (action) openWhyModal(action);
+      return;
+    }
     const csvButton = event.target.closest("[data-open-csv]");
     if (csvButton) {
       setView("csv");
@@ -542,6 +800,33 @@
     }
     const nearestButton = event.target.closest("[data-nearest]");
     if (nearestButton) selectNode(nearestButton.dataset.nearest);
+    const rankButton = event.target.closest("[data-rank-action]");
+    if (rankButton) {
+      const action = actionById(rankButton.dataset.rankAction);
+      if (action) openActionInRankings(action);
+    }
+  }
+
+  function openActionInRankings(action) {
+    if (!action) return;
+    state.highlight = { city: action.city_id, node: Number(action.node_id) };
+    state.lbSearch = "";
+    state.lbConfidence = "all";
+    state.lbReview = false;
+    const search = $("#lbSearch");
+    if (search) search.value = "";
+    const confidence = $("#lbConfidence");
+    if (confidence) confidence.value = "all";
+    const review = $("#lbReview");
+    if (review) review.checked = false;
+    setView("leaderboard");
+    window.requestAnimationFrame(() => {
+      const row = Array.from(els.leaderboardBody.querySelectorAll("tr[data-node]")).find(
+        (tr) => tr.dataset.city === action.city_id && Number(tr.dataset.node) === Number(action.node_id),
+      );
+      if (row) row.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+    toast(`Opened ${action.action_id} in Rankings`);
   }
 
   function onTableClick(event) {
@@ -569,8 +854,13 @@
       ? filtered
           .map((action, index) => {
             const selected = action.city_id === state.cityId && Number(action.node_id) === Number(state.selectedNode);
+            const highlighted =
+              Boolean(state.highlight) &&
+              state.highlight.city === action.city_id &&
+              Number(state.highlight.node) === Number(action.node_id);
+            const rowClass = [selected ? "is-selected" : "", highlighted ? "is-highlighted" : ""].join(" ").trim();
             return `
-              <tr data-city="${esc(action.city_id)}" data-node="${action.node_id}" class="${selected ? "is-selected" : ""}">
+              <tr data-city="${esc(action.city_id)}" data-node="${action.node_id}" class="${rowClass}">
                 <td class="num">${index + 1}</td>
                 <td><strong>${esc(action.action_id.replace("SYN-", ""))}</strong><div class="muted-cell">rank ${action.rank}</div></td>
                 <td class="city-cell">${esc(action.city_id)}</td>
@@ -692,6 +982,7 @@
     const tag = event.target?.tagName?.toLowerCase();
     if (["input", "select", "textarea"].includes(tag)) return;
     if (event.key === "Escape") {
+      if (!els.whyModal.hidden) return closeWhyModal();
       state.selectedNode = null;
       renderDetails();
       renderCityActions();
@@ -748,6 +1039,9 @@
     const spanY = Math.max(0.0001, maxY - minY);
     const scale = Math.min((width - padding * 2) / spanX, (height - padding * 2) / spanY);
     state.map.scale = scale;
+    state.map.fitScale = scale;
+    state.map.minScale = scale * 0.6;
+    state.map.maxScale = scale * 80;
     state.map.tx = (width - spanX * scale) / 2 - minX * scale;
     state.map.ty = (height - spanY * scale) / 2 - minY * scale;
     state.map.fitted = true;
@@ -769,7 +1063,8 @@
 
     const city = currentCity();
     if (!city) return;
-    const actionsByNode = new Map(city.actions.map((action) => [Number(action.node_id), action]));
+    const visibleActions = visibleCityActions();
+    const actionsByNode = new Map(visibleActions.map((action) => [Number(action.node_id), action]));
     const selectedAction = currentAction();
     const selectedNodeId = state.selectedNode === null ? null : Number(state.selectedNode);
 
@@ -834,35 +1129,41 @@
       });
     }
 
-    city.actions.forEach((action) => {
+    const maxUplift = Math.max(...visibleActions.map((action) => Number(action.predicted_uplift) || 0), 1);
+    visibleActions.forEach((action) => {
       const node = city.nodes[action.node_id];
       if (!node) return;
       const [x, y] = worldToScreen(node[0], node[1]);
       const selected = Number(action.node_id) === selectedNodeId;
-      const hovered = state.map.hover === action.node_id;
+      const hovered = Number(state.map.hover) === Number(action.node_id);
+      const intensity = Math.max(0.18, Math.min(1, Number(action.predicted_uplift) / maxUplift));
       ctx.beginPath();
-      ctx.arc(x, y, selected ? 10 : 8, 0, Math.PI * 2);
-      ctx.fillStyle = action.requires_human_review ? "#ffd23f" : "#ff7a00";
+      ctx.arc(x, y, 13 + intensity * 12, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 122, 0, ${0.05 + intensity * 0.08})`;
+      ctx.fill();
+      if (hovered || selected) {
+        ctx.beginPath();
+        ctx.arc(x, y, selected ? 17 : 15, 0, Math.PI * 2);
+        ctx.fillStyle = selected ? "rgba(0, 87, 184, 0.10)" : "rgba(255, 122, 0, 0.10)";
+        ctx.fill();
+      }
+      const actionColor = action.requires_human_review ? "#ffd23f" : action.confidence === "medium" ? "#f4a300" : "#ff7a00";
+      ctx.beginPath();
+      ctx.arc(x, y, selected ? 11 : 9.5, 0, Math.PI * 2);
+      ctx.fillStyle = actionColor;
       ctx.fill();
       ctx.strokeStyle = selected ? "#0b2340" : "#ffffff";
       ctx.lineWidth = selected ? 2.5 : 2;
       ctx.stroke();
-      if (hovered) {
-        ctx.beginPath();
-        ctx.arc(x, y, 13, 0, Math.PI * 2);
-        ctx.strokeStyle = "#ff7a00";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
       ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.arc(x, y, 6.6, 0, Math.PI * 2);
       ctx.fillStyle = "#ffffff";
       ctx.fill();
       ctx.fillStyle = "#0b2340";
-      ctx.font = "700 8px Inter, sans-serif";
+      ctx.font = "800 9px Inter, Segoe UI, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(String(action.rank), x, y + 0.4);
+      ctx.fillText(String(action.rank), x, y + 0.5);
     });
 
     if (selectedAction) {
@@ -887,12 +1188,12 @@
     const x = clientX - rect.left;
     const y = clientY - rect.top;
     let best = null;
-    city.actions.forEach((action) => {
+    visibleCityActions().forEach((action) => {
       const node = city.nodes[action.node_id];
       if (!node) return;
       const [sx, sy] = worldToScreen(node[0], node[1]);
       const distance = Math.hypot(sx - x, sy - y);
-      if (distance < 13 && (!best || distance < best.distance)) best = { node: action.node_id, distance };
+      if (distance < 16 && (!best || distance < best.distance)) best = { node: action.node_id, distance };
     });
     if (best) return best.node;
     city.nodes.forEach((node, index) => {
@@ -917,11 +1218,16 @@
     const node = city.nodes[nodeId];
     if (!node) return;
     const label = action
-      ? `Rank ${action.rank} · ${esc(action.action_id)}`
+      ? `Rank ${action.rank} | ${esc(action.action_id)}`
       : Number(node[2]) === 1
         ? "Existing charging station"
         : "Candidate node";
-    els.mapTooltip.innerHTML = `<strong>Node ${nodeId}</strong>${label}<br>${action ? `${fmt(action.predicted_uplift, 1)} uplift · ${action.confidence} confidence` : `demand ${fmt(node[3], 1)}`}`;
+    const driver = action?.drivers?.[0];
+    const driverLine = driver
+      ? `<span class="tip-driver">Top driver: ${esc(featureLabel(driver.feature))} = ${featureValue(driver.feature, driver.value)} (city median ${featureValue(driver.feature, driver.median)})</span>`
+      : "";
+    const hint = action ? `<span class="tip-hint">Click to inspect | double-click for the decision trace</span>` : "";
+    els.mapTooltip.innerHTML = `<strong>Node ${nodeId}</strong>${label}<br>${action ? `${fmt(action.predicted_uplift, 1)} uplift | ${action.confidence} confidence` : `demand ${fmt(node[3], 1)}`}${driverLine}${hint}`;
     const rect = canvas.getBoundingClientRect();
     const wrapRect = canvas.parentElement.getBoundingClientRect();
     els.mapTooltip.hidden = false;
@@ -1003,18 +1309,38 @@
     const rect = canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+    // Normalise mouse wheels (delta ~100) and trackpads (delta ~1–10) so both
+    // feel like the same zoom speed.
+    const intensity = Math.min(2.5, Math.max(0.6, Math.abs(event.deltaY || 0) / 100));
+    const factor = event.deltaY < 0 ? 1 + 0.16 * intensity : 1 / (1 + 0.16 * intensity);
     zoomAt(factor, x, y);
   }
 
   function zoomAt(factor, screenX, screenY) {
+    const fit = state.map.fitScale || state.map.scale || 1;
+    const minScale = Math.max(1e-6, state.map.minScale || fit * 0.6);
+    const maxScale = Math.max(minScale * 1.5, state.map.maxScale || fit * 80);
+    const nextScale = Math.max(minScale, Math.min(maxScale, state.map.scale * factor));
+    if (Math.abs(nextScale - state.map.scale) < 1e-9) return;
+    // Keep the world point under the cursor fixed while zooming.
     const [worldX, worldY] = screenToWorld(screenX, screenY);
-    const nextScale = Math.max(0.35, Math.min(10, state.map.scale * factor));
     state.map.autoFit = false;
     state.map.scale = nextScale;
     state.map.tx = screenX - worldX * nextScale;
     state.map.ty = screenY - worldY * nextScale;
     drawMap();
+  }
+
+  function onCanvasDoubleClick(event) {
+    const city = currentCity();
+    const nodeId = hitTest(event.clientX, event.clientY);
+    const action = actionAt(city, nodeId);
+    if (action) {
+      openWhyModal(action);
+      return;
+    }
+    fitMap();
+    toast("Map fitted to the city");
   }
 
   function populateCities() {
@@ -1063,6 +1389,17 @@
   }
 
   init();
+
+  // Small handle for local debugging and the automated UI check in tools/ui_check.py.
+  window.__ppc = {
+    state,
+    currentCity,
+    visibleCityActions,
+    worldToScreen,
+    fitMap,
+    zoomAt,
+    openActionInRankings,
+  };
 })();
 
 
