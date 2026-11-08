@@ -17,10 +17,6 @@
     lbReview: false,
     csvSearch: "",
     layers: { links: true, demand: false, stations: true },
-    plan: new Set(),
-    tour: null,
-    tourIndex: 0,
-    presenting: false,
     map: {
       scale: 1,
       tx: 0,
@@ -62,11 +58,6 @@
 
   const actionById = (id) => state.data?.actions.find((action) => action.action_id === id) || null;
 
-  const planActions = () =>
-    (state.data?.actions || [])
-      .filter((action) => state.plan.has(action.action_id))
-      .sort((a, b) => (a.city_id + a.rank).localeCompare(b.city_id + b.rank));
-
   const confidenceLabel = (value) => ({ high: "High", medium: "Medium", low: "Low" }[value] || value);
   const confidenceClass = (value) => (["high", "medium", "low"].includes(value) ? value : "low");
 
@@ -105,23 +96,6 @@
     }
     out.push(current);
     return out;
-  }
-
-  function savePlan() {
-    try {
-      localStorage.setItem("cq-plan", JSON.stringify(Array.from(state.plan)));
-    } catch {
-      /* storage can be disabled; the UI still works in memory */
-    }
-  }
-
-  function loadPlan() {
-    try {
-      const raw = localStorage.getItem("cq-plan");
-      if (raw) state.plan = new Set(JSON.parse(raw));
-    } catch {
-      state.plan = new Set();
-    }
   }
 
   function toast(message) {
@@ -214,7 +188,7 @@
     els.cityActionCount = $("#cityActionCount");
     els.detailsEmpty = $("#detailsEmpty");
     els.detailsContent = $("#detailsContent");
-    els.topDeployments = $("#topDeployments");
+    els.topRecommendations = $("#topRecommendations");
     els.leaderboardBody = $("#leaderboardBody");
     els.csvHeadRow = $("#csvHeadRow");
     els.csvBody = $("#csvBody");
@@ -223,13 +197,7 @@
     els.featureBars = $("#featureBars");
     els.modelSteps = $("#modelSteps");
     els.cityMosaic = $("#cityMosaic");
-    els.planCount = $("#planCount");
-    els.planSummary = $("#planSummary");
-    els.planModal = $("#planModal");
-    els.planList = $("#planList");
     els.toast = $("#toast");
-    els.tourBtn = $("#tourBtn");
-    els.presentBtn = $("#presentBtn");
 
     $$("[data-view]").forEach((element) => {
       element.addEventListener("click", (event) => {
@@ -289,7 +257,7 @@
       const button = event.target.closest("[data-node]");
       if (button) selectNode(button.dataset.node);
     });
-    els.topDeployments.addEventListener("click", (event) => {
+    els.topRecommendations.addEventListener("click", (event) => {
       const button = event.target.closest("[data-city][data-node]");
       if (button) {
         selectCity(button.dataset.city, { node: button.dataset.node });
@@ -323,39 +291,6 @@
       renderCsv();
     });
 
-    $("#planBtn").addEventListener("click", openPlan);
-    $("#openPlanBtn").addEventListener("click", openPlan);
-    $("#closePlanBtn").addEventListener("click", closePlan);
-    $("#clearPlanBtn").addEventListener("click", () => {
-      if (!state.plan.size) return;
-      state.plan.clear();
-      savePlan();
-      renderPlanUI();
-      renderDetails();
-      renderLeaderboard();
-      renderCsv();
-      toast("Plan cleared.");
-    });
-    $("#copyPlanBtn").addEventListener("click", copyPlan);
-    $("#downloadPlanBtn").addEventListener("click", downloadPlan);
-    els.planModal.addEventListener("click", (event) => {
-      if (event.target === els.planModal) closePlan();
-    });
-    els.planList.addEventListener("click", (event) => {
-      const remove = event.target.closest("[data-plan-remove]");
-      if (remove) {
-        state.plan.delete(remove.dataset.planRemove);
-        savePlan();
-        renderPlanUI();
-        renderPlanModal();
-        renderDetails();
-        renderLeaderboard();
-        renderCsv();
-      }
-    });
-
-    els.tourBtn.addEventListener("click", () => (state.tour ? stopTour() : startTour()));
-    els.presentBtn.addEventListener("click", togglePresent);
     window.addEventListener("hashchange", applyHash);
     window.addEventListener("resize", () => {
       resizeCanvas();
@@ -380,9 +315,8 @@
     renderCityStats();
     renderCityScorecard();
     renderCityActions();
-    renderTopDeployments();
+    renderTopRecommendations();
     renderDetails();
-    renderPlanUI();
     renderLeaderboard();
     renderCsv();
     renderModel();
@@ -406,7 +340,7 @@
     els.mapKpis.innerHTML = `
       <span class="map-kpi"><span class="dot dot-node"></span>${fmt(city.n_nodes, 0)} nodes</span>
       <span class="map-kpi"><span class="dot dot-station"></span>${fmt(city.n_existing, 0)} existing</span>
-      <span class="map-kpi"><span class="dot dot-tower"></span>${actions.length} towers</span>
+      <span class="map-kpi"><span class="dot dot-site"></span>${actions.length} recommendations</span>
       <span class="map-kpi">${reviews} review</span>
     `;
   }
@@ -464,7 +398,7 @@
     const actions = activeCityActions();
     els.cityActionCount.textContent = `${actions.length}/${city.actions.length}`;
     if (!actions.length) {
-      els.cityActionList.innerHTML = `<div class="empty-list">No towers match these filters.</div>`;
+      els.cityActionList.innerHTML = `<div class="empty-list">No sites match these filters.</div>`;
       return;
     }
     els.cityActionList.innerHTML = actions
@@ -481,13 +415,13 @@
       .join("");
   }
 
-  function renderTopDeployments() {
+  function renderTopRecommendations() {
     const top = state.data.actions.slice(0, 6);
-    els.topDeployments.innerHTML = top
+    els.topRecommendations.innerHTML = top
       .map((action, index) => `
         <button class="top-item" data-city="${esc(action.city_id)}" data-node="${action.node_id}">
           <span class="top-rank">${index + 1}</span>
-          <span><strong>${esc(action.city_id)} · node ${action.node_id}</strong><small>${esc(action.confidence)} confidence · rank ${action.rank}</small></span>
+          <span><strong>${esc(action.city_id)} · Node ${action.node_id}</strong><small>${esc(action.confidence)} confidence · rank ${action.rank}</small></span>
           <span class="top-value">${fmt(action.predicted_uplift, 1)}<small>uplift</small></span>
         </button>`)
       .join("");
@@ -518,16 +452,15 @@
     els.detailsContent.hidden = false;
 
     if (action) {
-      const inPlan = state.plan.has(action.action_id);
       const review = action.requires_human_review
         ? `<div class="review-alert"><svg class="icon"><use href="#i-warning"></use></svg><span>${esc(action.review_reason || "Flagged for human review.")}</span></div>`
         : "";
       els.detailsContent.innerHTML = `
         <div class="details-top">
           <div class="details-head">
-            <span class="rank-shield"><small>Rank</small><strong>${action.rank}</strong></span>
+            <span class="rank-badge"><small>Rank</small><strong>${action.rank}</strong></span>
             <div class="details-title">
-              <h2>${esc(action.city_id)} · node ${action.node_id}</h2>
+              <h2>${esc(action.city_id)} · Node ${action.node_id}</h2>
               <div class="sub">${esc(action.action_id)} · ${esc(action.status)}</div>
             </div>
           </div>
@@ -555,7 +488,6 @@
           </div>
           <div class="details-actions">
             <button class="btn ghost small" data-copy-action="${esc(action.action_id)}"><svg class="icon"><use href="#i-copy"></use></svg>Copy row</button>
-            <button class="btn ${inPlan ? "ghost" : "primary"} small" data-plan-action="${esc(action.action_id)}"><svg class="icon"><use href="#i-${inPlan ? "check" : "plus"}"></use></svg>${inPlan ? "In plan" : "Add to plan"}</button>
             <button class="btn ghost small" data-open-csv="${esc(action.action_id)}"><svg class="icon"><use href="#i-table"></use></svg>CSV view</button>
           </div>
         </div>
@@ -574,10 +506,10 @@
       <div class="station-panel">
         <div class="eyebrow">${isStation ? "Existing station" : "Candidate node"}</div>
         <h2>Node ${state.selectedNode}</h2>
-        <p>${isStation ? "This node already has a simulated charging station. It is evidence, not a new recommendation." : "This node was not selected by the model. You can inspect it, but it is not in the deployment plan."}</p>
+        <p>${isStation ? "This node already has a simulated charging station. It is evidence, not a new recommendation." : "This node was not selected by the model. You can inspect it, but it is not in the recommendation set."}</p>
         ${station}
         <div class="score-row"><span>Coordinates</span><strong>${fmt(x, 3)}, ${fmt(y, 3)}</strong></div>
-        ${nearest ? `<button class="btn primary small" data-nearest="${nearest.node_id}"><svg class="icon"><use href="#i-tower"></use></svg>Nearest tower · rank ${nearest.rank}</button>` : ""}
+        ${nearest ? `<button class="btn primary small" data-nearest="${nearest.node_id}"><svg class="icon"><use href="#i-map"></use></svg>Nearest recommendation · rank ${nearest.rank}</button>` : ""}
       </div>
     `;
   }
@@ -603,11 +535,6 @@
       if (action) copyText(action.csv_row, "CSV row copied.");
       return;
     }
-    const planButton = event.target.closest("[data-plan-action]");
-    if (planButton) {
-      togglePlan(planButton.dataset.planAction);
-      return;
-    }
     const csvButton = event.target.closest("[data-open-csv]");
     if (csvButton) {
       setView("csv");
@@ -618,19 +545,14 @@
   }
 
   function onTableClick(event) {
-    const planButton = event.target.closest("[data-plan]");
-    if (planButton) {
-      event.stopPropagation();
-      togglePlan(planButton.dataset.plan);
-      return;
-    }
     const row = event.target.closest("[data-city][data-node]");
     if (!row) return;
     selectCity(row.dataset.city, { node: row.dataset.node });
     setView("map");
   }
 
-  function renderLeaderboard() {    if (!state.data) return;
+  function renderLeaderboard() {
+    if (!state.data) return;
     const query = state.lbSearch;
     const filtered = state.data.actions
       .filter((action) => {
@@ -647,7 +569,6 @@
       ? filtered
           .map((action, index) => {
             const selected = action.city_id === state.cityId && Number(action.node_id) === Number(state.selectedNode);
-            const inPlan = state.plan.has(action.action_id);
             return `
               <tr data-city="${esc(action.city_id)}" data-node="${action.node_id}" class="${selected ? "is-selected" : ""}">
                 <td class="num">${index + 1}</td>
@@ -658,11 +579,10 @@
                 <td class="num">${fmt(action.predicted_usage, 1)}</td>
                 <td><span class="badge ${confidenceClass(action.confidence)}">${esc(confidenceLabel(action.confidence))}</span></td>
                 <td>${action.requires_human_review ? `<span class="badge review"><svg class="icon"><use href="#i-warning"></use></svg>Yes</span>` : `<span class="muted-cell">—</span>`}</td>
-                <td><button class="row-btn" data-plan="${esc(action.action_id)}" aria-label="${inPlan ? "Remove from plan" : "Add to plan"}"><svg class="icon"><use href="#i-${inPlan ? "check" : "plus"}"></use></svg></button></td>
               </tr>`;
           })
           .join("")
-      : `<tr><td colspan="9" class="table-empty">No rows match.</td></tr>`;
+      : `<tr><td colspan="8" class="table-empty">No rows match.</td></tr>`;
   }
 
   function renderCsv() {
@@ -744,63 +664,11 @@
       .map((city) => {
         const ratio = Math.max(0, Math.min(100, Number(city.placement.utility_ratio) * 100));
         return `<button class="city-tile" data-city="${esc(city.city_id)}" title="${esc(city.city_id)} · ${pct(city.placement.utility_ratio)} of oracle">
-          <strong>${esc(city.city_id.replace("test_", ""))}</strong><span>${ratio.toFixed(0)}%</span><small>${city.actions.length} towers</small>
+          <strong>${esc(city.city_id.replace("test_", ""))}</strong><span>${ratio.toFixed(0)}%</span><small>${city.actions.length} sites</small>
           <div class="tile-bar"><i style="width:${ratio.toFixed(1)}%"></i></div>
         </button>`;
       })
       .join("");
-  }
-
-  function renderPlanUI() {
-    const actions = planActions();
-    const cityCount = new Set(actions.map((action) => action.city_id)).size;
-    els.planCount.textContent = String(actions.length);
-    els.planSummary.textContent = actions.length
-      ? `${actions.length} tower${actions.length === 1 ? "" : "s"} across ${cityCount} ${cityCount === 1 ? "city" : "cities"}.`
-      : "No towers added yet.";
-    renderPlanModal();
-  }
-
-  function renderPlanModal() {
-    if (!els.planList) return;
-    const actions = planActions();
-    if (!actions.length) {
-      els.planList.innerHTML = `<div class="plan-empty">Add towers from the map or leaderboard to build a deployment sheet.</div>`;
-      return;
-    }
-    els.planList.innerHTML = actions
-      .map((action) => `<div class="plan-item">
-        <span class="action-rank">${action.rank}</span>
-        <span><strong>${esc(action.city_id)} · node ${action.node_id}</strong><small>${esc(action.action_id)} · ${esc(action.confidence)} confidence</small></span>
-        <span class="plan-val">${fmt(action.predicted_uplift, 1)}<small>uplift</small></span>
-        <button class="row-btn" data-plan-remove="${esc(action.action_id)}" aria-label="Remove"><svg class="icon"><use href="#i-close"></use></svg></button>
-      </div>`)
-      .join("");
-  }
-
-  function openPlan() {
-    renderPlanModal();
-    els.planModal.hidden = false;
-    $("#closePlanBtn").focus();
-  }
-  function closePlan() {
-    els.planModal.hidden = true;
-  }
-
-  function togglePlan(actionId) {
-    if (!actionId) return;
-    if (state.plan.has(actionId)) {
-      state.plan.delete(actionId);
-      toast("Removed from plan.");
-    } else {
-      state.plan.add(actionId);
-      toast("Added to plan.");
-    }
-    savePlan();
-    renderPlanUI();
-    renderDetails();
-    renderLeaderboard();
-    renderCsv();
   }
 
   async function copyText(text, message) {
@@ -820,70 +688,10 @@
     }
   }
 
-  function copyPlan() {
-    const actions = planActions();
-    if (!actions.length) return toast("Plan is empty.");
-    const text = actions.map((action) => `${action.city_id} | node ${action.node_id} | rank ${action.rank} | ${fmt(action.predicted_uplift, 2)} uplift | ${action.confidence} confidence`).join("\n");
-    copyText(text, "Plan copied.");
-  }
-
-  function downloadPlan() {
-    const actions = planActions();
-    if (!actions.length) return toast("Plan is empty.");
-    const header = state.data.csv_header;
-    const csv = [header.join(","), ...actions.map((action) => action.csv_row)].join("\n");
-    downloadBlob(csv, "charge-quest-plan.csv");
-    toast("Plan CSV downloaded.");
-  }
-
-  function downloadBlob(content, filename) {
-    const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  function startTour() {
-    if (state.tour) return;
-    state.tourIndex = Math.max(0, state.data.actions.findIndex((action) => action.action_id === currentAction()?.action_id));
-    els.tourBtn.innerHTML = `<svg class="icon"><use href="#i-pause"></use></svg><span>Stop tour</span>`;
-    els.tourBtn.classList.add("primary");
-    const tick = () => {
-      const action = state.data.actions[state.tourIndex % state.data.actions.length];
-      state.tourIndex += 1;
-      selectCity(action.city_id, { node: action.node_id });
-      setView("map", false);
-      toast(`Tour: ${action.city_id} · rank ${action.rank}`);
-    };
-    tick();
-    state.tour = window.setInterval(tick, 3200);
-  }
-
-  function stopTour() {
-    if (state.tour) window.clearInterval(state.tour);
-    state.tour = null;
-    els.tourBtn.innerHTML = `<svg class="icon"><use href="#i-play"></use></svg><span>Auto tour</span>`;
-    els.tourBtn.classList.remove("primary");
-  }
-
-  function togglePresent() {
-    state.presenting = !state.presenting;
-    document.body.classList.toggle("presenting", state.presenting);
-    els.presentBtn.innerHTML = state.presenting
-      ? `<svg class="icon"><use href="#i-close"></use></svg><span>Exit</span>`
-      : `<svg class="icon"><use href="#i-spark"></use></svg><span>Present</span>`;
-    window.requestAnimationFrame(() => { resizeCanvas(); drawMap(); fitMap(); });
-  }
-
   function onKeyDown(event) {
     const tag = event.target?.tagName?.toLowerCase();
     if (["input", "select", "textarea"].includes(tag)) return;
     if (event.key === "Escape") {
-      if (!els.planModal.hidden) return closePlan();
-      if (state.presenting) return togglePresent();
       state.selectedNode = null;
       renderDetails();
       renderCityActions();
@@ -1240,7 +1048,6 @@
       document.body.innerHTML = `<main style="max-width:640px;margin:10vh auto;font-family:Inter,sans-serif;padding:24px;border:2px solid #0b2340;border-radius:20px;box-shadow:0 4px 0 #d5e3f2"><h1 style="font-family:Fredoka,sans-serif">Could not load the demo</h1><p>Start the local server from <code>frontend/</code>: <code>python server.py</code>, then open the printed URL.</p><p style="color:#5e768e">${esc(error.message)}</p></main>`;
       return;
     }
-    loadPlan();
     readHash();
     if (!state.cityId) state.cityId = state.data.demo_city;
     canvas = $("#mapCanvas");
@@ -1257,3 +1064,5 @@
 
   init();
 })();
+
+

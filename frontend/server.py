@@ -1,4 +1,4 @@
-"""Tiny static server for the Charge Quest frontend.
+"""Tiny static server for the PPC EV Siting Lab frontend.
 
 No dependencies, no build step. Serves the frontend directory and opens the UI.
 """
@@ -30,7 +30,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Serve the Charge Quest frontend")
+    parser = argparse.ArgumentParser(description="Serve the PPC EV Siting Lab frontend")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--no-browser", action="store_true")
@@ -50,7 +50,7 @@ def main() -> int:
     if server is None:
         raise SystemExit(f"Could not bind {args.host}:{args.port}–{args.port + 19}")
     url = f"http://{args.host}:{port}/"
-    print(f"Charge Quest frontend: {url}", flush=True)
+    print(f"PPC EV Siting Lab frontend: {url}", flush=True)
     if not args.no_browser:
         webbrowser.open(url)
     try:

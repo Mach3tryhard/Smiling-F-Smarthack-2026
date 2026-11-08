@@ -54,7 +54,7 @@ The short answer on the held-out test cities: **85.5% of the oracle, with 14.5% 
 
 **Repository scope.** The earlier real-data Bucharest/OSM prototype is not part of this deliverable. This repository is self-contained around the synthetic benchmark; old out-of-core pyrosm scratch directories and caches have been removed. The generator and dataset live in [`../data-generation/`](../data-generation/); the models, evaluation, and agent are in `src/evplacement/synthetic/`.
 
-**Interactive UI.** [`../frontend/`](../frontend/) contains the standalone Charge Quest UI: a white-canvas node map, ranked tower recommendations, click-through confidence/CSV details, a deployment planner, and a model-results view. Run it with `python ../frontend/server.py` from this folder (or see the [frontend README](../frontend/README.md)).
+**Interactive UI.** [`../frontend/`](../frontend/) contains the standalone PPC EV Siting Lab UI: a white-canvas node map, ranked site recommendations, click-through confidence/CSV details, regional rankings, and a model-results view. Run it with `python ../frontend/server.py` from this folder (or see the [frontend README](../frontend/README.md)).
 
 ---
 
