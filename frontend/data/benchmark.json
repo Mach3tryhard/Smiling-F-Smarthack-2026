@@ -1,0 +1,10 @@
+{
+  "n_train": 300,
+  "n_validation": 40,
+  "n_test": 40,
+  "n_test_shift": 20,
+  "n_nodes_total": 501812,
+  "n_stations_total": 36809,
+  "generator_version": "1.0",
+  "base_seed": 202600
+}

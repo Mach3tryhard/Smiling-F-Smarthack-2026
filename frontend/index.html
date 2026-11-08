@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PPC Charge Quest — EV Siting Lab</title>
+  <meta name="description" content="Tower-defense inspired UI for the synthetic EV charging placement benchmark." />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <svg class="svg-sprite" aria-hidden="true" focusable="false">
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.2 2 4.8 13.1h5.7L10.4 22l8.8-11.6h-6.1L13.2 2Z" fill="currentColor"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M3 6.5 8.5 4l7 2.5L21 4v13.5L15.5 20l-7-2.5L3 20V6.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8.5 4v13.5M15.5 6.5V20" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M7 4h10v4.5a5 5 0 0 1-10 0V4Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 5H4.5v2.5A3.5 3.5 0 0 0 8 11M17 5h2.5v2.5A3.5 3.5 0 0 1 16 11M12 13.5V18M8.5 21h7M9.5 18h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-table" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 9h17M9 9v10.5M3.5 14.5h17" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v11m0 0 4-4m-4 4-4-4M4 20h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15.5 15.5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z" fill="currentColor"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-warning" viewBox="0 0 24 24"><path d="m12 3 9.5 17h-19L12 3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9v5m0 3v.1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-banana" viewBox="0 0 24 24"><path d="M4.5 8c2.3 7 7.4 10.8 14.5 9.2-1.4 2.4-4.1 3.8-7 3.3C6.7 19.6 3 14.2 4.5 8Z" fill="currentColor"/><path d="M17.8 4.2c1.2 2.5 1.4 5 .7 7.3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+    <symbol id="i-tower" viewBox="0 0 24 24"><path d="M8 21h8M9 21V9l3-5 3 5v12M7 9h10M10 13h4M10 17h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" fill="currentColor"/></symbol>
+  </svg>
+
+  <div class="app">
+    <header class="topbar">
+      <a class="brand" href="#view=map" data-view="map" aria-label="Charge Quest home">
+        <span class="brand-mark"><svg class="icon"><use href="#i-bolt"></use></svg></span>
+        <span class="brand-copy">
+          <span class="brand-kicker"><svg class="icon tiny"><use href="#i-banana"></use></svg><span class="ppc-chip">PPC</span> CHARGE QUEST</span>
+          <strong>EV Siting Lab</strong>
+        </span>
+      </a>
+      <nav class="tabs" aria-label="Views">
+        <button class="tab is-active" data-view="map"><svg class="icon"><use href="#i-map"></use></svg><span>Tower map</span></button>
+        <button class="tab" data-view="leaderboard"><svg class="icon"><use href="#i-trophy"></use></svg><span>Leaderboard</span></button>
+        <button class="tab" data-view="csv"><svg class="icon"><use href="#i-table"></use></svg><span>CSV intel</span></button>
+        <button class="tab" data-view="model"><svg class="icon"><use href="#i-chart"></use></svg><span>Model</span></button>
+      </nav>
+      <div class="top-actions">
+        <button class="btn ghost" id="planBtn"><svg class="icon"><use href="#i-check"></use></svg><span>Plan</span><span class="count" id="planCount">0</span></button>
+        <button class="btn ghost" id="tourBtn"><svg class="icon"><use href="#i-play"></use></svg><span>Auto tour</span></button>
+        <button class="btn primary" id="presentBtn"><svg class="icon"><use href="#i-spark"></use></svg><span>Present</span></button>
+      </div>
+    </header>
+
+    <div class="shell">
+      <aside class="rail left-rail">
+        <section class="card pad city-card">
+          <div class="eyebrow">Test city</div>
+          <div class="city-picker">
+            <button class="icon-btn" id="prevCity" aria-label="Previous city"><svg class="icon"><use href="#i-arrow-left"></use></svg></button>
+            <select id="citySelect" aria-label="Select a synthetic test city"></select>
+            <button class="icon-btn" id="nextCity" aria-label="Next city"><svg class="icon"><use href="#i-arrow-right"></use></svg></button>
+          </div>
+          <div class="city-sub" id="citySub">—</div>
+          <div class="mini-stats" id="cityMiniStats"></div>
+        </section>
+
+        <section class="card pad">
+          <div class="eyebrow">Filters</div>
+          <div class="chip-row" id="confidenceFilters" role="group" aria-label="Confidence filter">
+            <button class="chip is-active" data-confidence="all">All</button>
+            <button class="chip" data-confidence="high">High</button>
+            <button class="chip" data-confidence="medium">Medium</button>
+            <button class="chip" data-confidence="low">Low</button>
+          </div>
+          <label class="switch-row">
+            <input type="checkbox" id="reviewOnly" />
+            <span class="switch"></span>
+            <span>Review queue only</span>
+          </label>
+          <div class="search-box">
+            <svg class="icon"><use href="#i-search"></use></svg>
+            <input id="searchInput" type="search" placeholder="Search node, action, rank…" autocomplete="off" />
+          </div>
+        </section>
+
+        <section class="card pad">
+          <div class="eyebrow">Layers</div>
+          <label class="switch-row"><input type="checkbox" id="layerLinks" checked /><span class="switch"></span><span>Graph links</span></label>
+          <label class="switch-row"><input type="checkbox" id="layerDemand" /><span class="switch"></span><span>Simulator demand</span></label>
+          <label class="switch-row"><input type="checkbox" id="layerStations" checked /><span class="switch"></span><span>Existing stations</span></label>
+          <div class="legend">
+            <div><span class="dot dot-node"></span>Urban node</div>
+            <div><span class="dot dot-station"></span>Existing station</div>
+            <div><span class="dot dot-tower"></span>Recommended tower</div>
+            <div><span class="dot dot-review"></span>Needs review</div>
+          </div>
+        </section>
+
+        <section class="card pad scorecard" id="cityStats"></section>
+
+        <section class="card pad plan-card">
+          <div class="eyebrow">Deployment plan</div>
+          <p id="planSummary">No towers added yet.</p>
+          <div class="button-row">
+            <button class="btn primary small" id="openPlanBtn">Open plan</button>
+            <button class="btn ghost small" id="clearPlanBtn">Clear</button>
+          </div>
+        </section>
+      </aside>
+
+      <main class="main">
+        <section class="view is-active" id="view-map" aria-label="Tower map">
+          <div class="card map-card">
+            <div class="map-head">
+              <div>
+                <div class="eyebrow">Tower-defense canvas · no basemap</div>
+                <h2 id="mapTitle">Loading city…</h2>
+              </div>
+              <div class="map-head-right">
+                <div class="map-kpis" id="mapKpis"></div>
+                <div class="map-controls">
+                  <button class="icon-btn" id="zoomOut" aria-label="Zoom out"><svg class="icon"><use href="#i-minus"></use></svg></button>
+                  <button class="icon-btn" id="zoomIn" aria-label="Zoom in"><svg class="icon"><use href="#i-plus"></use></svg></button>
+                  <button class="icon-btn" id="fitMap" aria-label="Fit map"><svg class="icon"><use href="#i-fit"></use></svg></button>
+                </div>
+              </div>
+            </div>
+            <div class="map-wrap">
+              <canvas id="mapCanvas" tabindex="0" aria-label="Synthetic city node map with recommended charging stations"></canvas>
+              <div class="map-note">White canvas by design — dots are synthetic graph nodes, not streets. Scroll to zoom, drag to pan, click a node.</div>
+              <div class="map-tooltip" id="mapTooltip" hidden></div>
+            </div>
+          </div>
+          <div class="bottom-grid">
+            <section class="card pad">
+              <div class="section-head"><div><div class="eyebrow">Global</div><h2>Top deployments</h2></div><svg class="icon big-icon"><use href="#i-trophy"></use></svg></div>
+              <div class="top-list" id="topDeployments"></div>
+            </section>
+            <section class="card pad">
+              <div class="section-head"><div><div class="eyebrow">This city</div><h2>City scorecard</h2></div><svg class="icon big-icon"><use href="#i-chart"></use></svg></div>
+              <div class="scorecard-grid" id="cityScorecard"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-leaderboard" aria-label="Leaderboard">
+          <div class="card view-card">
+            <div class="view-head">
+              <div><div class="eyebrow">All 40 test cities</div><h2>Recommended tower leaderboard</h2><p>Ranked by predicted incremental sessions/day. Click any row to inspect it on the map.</p></div>
+              <div class="view-controls">
+                <div class="search-box compact"><svg class="icon"><use href="#i-search"></use></svg><input id="lbSearch" type="search" placeholder="Filter city or node…" /></div>
+                <select id="lbConfidence" class="select compact">
+                  <option value="all">All confidence</option>
+                  <option value="high">High only</option>
+                  <option value="medium">Medium only</option>
+                  <option value="low">Low only</option>
+                </select>
+                <label class="switch-row compact"><input type="checkbox" id="lbReview" /><span class="switch"></span><span>Review only</span></label>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table" id="leaderboardTable">
+                <thead><tr><th>#</th><th>Tower</th><th>City</th><th>Node</th><th>Uplift</th><th>Usage</th><th>Confidence</th><th>Review</th><th></th></tr></thead>
+                <tbody id="leaderboardBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-csv" aria-label="CSV data">
+          <div class="card view-card">
+            <div class="view-head">
+              <div><div class="eyebrow">Actual artifact</div><h2>priority_sites.csv</h2><p>The exact agent output. Click a row to inspect the node, or download the original CSV.</p></div>
+              <div class="view-controls">
+                <div class="search-box compact"><svg class="icon"><use href="#i-search"></use></svg><input id="csvSearch" type="search" placeholder="Filter CSV rows…" /></div>
+                <a class="btn primary small" href="data/priority_sites.csv" download><svg class="icon"><use href="#i-download"></use></svg><span>Download CSV</span></a>
+              </div>
+            </div>
+            <div class="table-hint"><svg class="icon"><use href="#i-arrow-right"></use></svg><span>16 actual CSV columns · scroll horizontally to see the full row</span></div>
+            <div class="table-wrap tall">
+              <table class="data-table csv-table" id="csvTable">
+                <thead><tr id="csvHeadRow"></tr></thead>
+                <tbody id="csvBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-model" aria-label="Model results">
+          <div class="model-grid">
+            <section class="card pad model-hero">
+              <div class="eyebrow">Synthetic benchmark · 40 unseen cities</div>
+              <h2>The model captures <span class="highlight">85.5%</span> of the oracle.</h2>
+              <p>K=8 chargers per city. The oracle is a greedy search on the simulator's ground truth; the model is a 3-seed MLP ensemble trained on 300 other cities.</p>
+              <div class="kpi-grid" id="modelKpis"></div>
+            </section>
+            <section class="card pad">
+              <div class="eyebrow">Placement vs baselines</div>
+              <h3>Share of oracle incremental utility</h3>
+              <div class="bar-list" id="baselineBars"></div>
+              <div class="callout"><svg class="icon"><use href="#i-spark"></use></svg><span>OOD test: <strong>88.4%</strong> of oracle. The model is not tuned on test cities.</span></div>
+            </section>
+            <section class="card pad">
+              <div class="eyebrow">Feature importance</div>
+              <h3>What drives candidate uplift</h3>
+              <div class="bar-list feature-bars" id="featureBars"></div>
+            </section>
+            <section class="card pad">
+              <div class="eyebrow">How a tower is chosen</div>
+              <h3>Three steps, one measurable objective</h3>
+              <div class="steps" id="modelSteps"></div>
+            </section>
+            <section class="card pad city-mosaic-card">
+              <div class="eyebrow">All test cities</div>
+              <h3>City scorecard mosaic</h3>
+              <div class="city-mosaic" id="cityMosaic"></div>
+            </section>
+            <section class="card pad scope-card">
+              <div class="eyebrow">Read this first</div>
+              <h3>What this is — and is not</h3>
+              <p>This is a <strong>synthetic decision benchmark</strong>, not a real Romanian demand forecast. The ground truth is generated by a Huff competition simulator. The UI shows model predictions on synthetic cities; absolute sessions/day should not be read as real Bucharest revenue.</p>
+              <div class="scope-pills"><span>400 cities</span><span>501,812 nodes</span><span>36,809 stations</span><span>K=8</span></div>
+            </section>
+          </div>
+        </section>
+      </main>
+
+      <aside class="rail right-rail">
+        <section class="card details-card">
+          <div id="detailsEmpty" class="details-empty">
+            <div class="empty-icon"><svg class="icon"><use href="#i-tower"></use></svg></div>
+            <h2>Pick a tower</h2>
+            <p>Click an orange recommendation on the white canvas, or choose one from the recommended list below.</p>
+            <div class="hint-row"><span class="key">←</span><span class="key">→</span><span>cycle towers</span></div>
+          </div>
+          <div id="detailsContent" hidden></div>
+        </section>
+        <section class="card pad city-actions-card">
+          <div class="section-head"><div><div class="eyebrow">This city</div><h3>Recommended towers</h3></div><span class="pill" id="cityActionCount">0</span></div>
+          <div id="cityActionList" class="city-action-list"></div>
+        </section>
+      </aside>
+    </div>
+
+    <footer class="footer">
+      <span><strong>Charge Quest</strong> · PPC × Smarthack 2026</span>
+      <span>Synthetic EV placement benchmark · no geographic basemap</span>
+    </footer>
+  </div>
+
+  <div class="modal-backdrop" id="planModal" hidden>
+    <div class="modal card" role="dialog" aria-modal="true" aria-labelledby="planTitle">
+      <div class="modal-head">
+        <div><div class="eyebrow">Deployment sheet</div><h2 id="planTitle">Your plan</h2></div>
+        <button class="icon-btn" id="closePlanBtn" aria-label="Close plan"><svg class="icon"><use href="#i-close"></use></svg></button>
+      </div>
+      <div class="modal-body" id="planList"></div>
+      <div class="modal-foot">
+        <button class="btn ghost small" id="copyPlanBtn"><svg class="icon"><use href="#i-copy"></use></svg><span>Copy</span></button>
+        <button class="btn primary small" id="downloadPlanBtn"><svg class="icon"><use href="#i-download"></use></svg><span>Download plan CSV</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
