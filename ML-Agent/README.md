@@ -52,7 +52,7 @@ The short answer on the held-out test cities: **85.5% of the oracle, with 14.5% 
 
 **The honest claim.** This is a complete, measurable decision benchmark: a simulator, two learned models, a placement optimizer, and an error metric defined against known counterfactual usage. It is **not** a forecast of real Romanian charging demand. Section 13 explains exactly what would be required to make that step.
 
-**Repository scope.** The earlier real-data Bucharest/OSM prototype is not part of this deliverable. This repository is self-contained around the synthetic benchmark; old out-of-core pyrosm scratch directories and caches have been removed. Everything needed to rebuild the benchmark is in `src/evplacement/synthetic/`.
+**Repository scope.** The earlier real-data Bucharest/OSM prototype is not part of this deliverable. This repository is self-contained around the synthetic benchmark; old out-of-core pyrosm scratch directories and caches have been removed. The generator and dataset live in [`../data-generation/`](../data-generation/); the models, evaluation, and agent are in `src/evplacement/synthetic/`.
 
 ---
 
@@ -108,7 +108,7 @@ That yields two ground-truth quantities a real dataset never has:
 
 ## 4. How the world is generated
 
-All generation is deterministic given a seed. The code is in `src/evplacement/synthetic/generator.py`.
+All generation is deterministic given a seed. The code is in [`../data-generation/src/evdata/generator.py`](../data-generation/src/evdata/generator.py).
 
 ### 4.1 Urban graph
 
@@ -728,32 +728,39 @@ The dashboard projects synthetic normalized coordinates into a small Romania-lik
 ### 10.1 Repository layout
 
 ```text
-ML-Agent/
+Smiling-F-Smarthack-2026/
 ├── README.md
-├── pyproject.toml
-├── requirements.txt
-├── data/
-│   └── synthetic/
-│       ├── cities.joblib        # 400 SyntheticCity objects (~261 MB)
-│       └── benchmark.json       # counts, seeds, generator version
-├── outputs/
-│   └── synthetic/               # models, metrics, predictions, agent, reports
-├── src/evplacement/
-│   ├── config.py
-│   └── synthetic/
-│       ├── generator.py         # city + ground truth + Huff simulator
-│       ├── model.py             # MLP/HGB ensemble, labels, oracle, metrics
-│       ├── agent.py             # action layer
-│       ├── dashboard.py         # HTML/PNG demos
-│       ├── reports.py           # two Romanian reports
-│       └── cli.py               # build / train / agent / report / run
-└── tests/
-    └── test_synthetic.py
+├── data-generation/
+│   ├── README.md
+│   ├── pyproject.toml            # installable "evdata" package
+│   ├── src/evdata/
+│   │   ├── generator.py          # city + ground truth + Huff simulator
+│   │   └── cli.py                # `evdata build`
+│   └── data/synthetic/
+│       ├── cities.joblib         # 400 SyntheticCity objects (~261 MB)
+│       └── benchmark.json        # counts, seeds, generator version
+└── ML-Agent/
+    ├── README.md
+    ├── pyproject.toml
+    ├── requirements.txt
+    ├── outputs/
+    │   └── synthetic/            # models, metrics, predictions, agent, reports
+    ├── src/evplacement/
+    │   ├── config.py
+    │   └── synthetic/
+    │       ├── generator.py      # compatibility re-export from evdata
+    │       ├── model.py          # MLP/HGB ensemble, labels, oracle, metrics
+    │       ├── agent.py          # action layer
+    │       ├── dashboard.py      # HTML/PNG demos
+    │       ├── reports.py        # two Romanian reports
+    │       └── cli.py            # build / train / agent / report / run
+    └── tests/
+        └── test_synthetic.py
 ```
 
 ### 10.2 `cities.joblib`
 
-A dictionary keyed by `city_id` (`{split}_{seed}`). Each value is a `SyntheticCity` dataclass:
+The dataset lives at [`../data-generation/data/synthetic/cities.joblib`](../data-generation/data/synthetic/cities.joblib). It is a dictionary keyed by `city_id` (`{split}_{seed}`), where each value is a `SyntheticCity` dataclass:
 
 | Field | Type | Content |
 |---|---|---|
@@ -864,7 +871,7 @@ python -m venv .venv
 ### 12.2 Commands
 
 ```powershell
-# 1. Generate 400 cities (writes data/synthetic/)
+# 1. Generate 400 cities (writes ../data-generation/data/synthetic/)
 .\.venv\Scripts\python.exe -m evplacement build
 
 # 2. Train usage + uplift models, evaluate holdout and OOD
@@ -883,7 +890,14 @@ Or all at once:
 .\.venv\Scripts\python.exe -m evplacement run --k 8
 ```
 
-`run` rebuilds the dataset only if `data/synthetic/cities.joblib` is missing or `--refresh` is passed; otherwise it reuses the existing cities and retrains.
+`run` rebuilds the dataset only if `../data-generation/data/synthetic/cities.joblib` is missing or `--refresh` is passed; otherwise it reuses the existing cities and retrains.
+
+The generator is also a standalone package. From `data-generation/`:
+
+```powershell
+python -m pip install -e .
+python -m evdata build
+```
 
 The console scripts `evplacement` and `evcharge-synthetic` are equivalent to `python -m evplacement`.
 
